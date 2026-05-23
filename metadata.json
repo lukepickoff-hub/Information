@@ -1,0 +1,6 @@
+{
+  "name": "Quantum Teacher AI",
+  "description": "An expert AI teacher that explains any topic at the atomic and cellular levels, connecting them to human experience using fundamental principles of physics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
