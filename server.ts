@@ -9,15 +9,96 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Initialize Gemini API with correct user-agent for telemetry
-  const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
+  // Helper for lazy client initialization
+  let aiClient: GoogleGenAI | null = null;
+  function getAiClient(): GoogleGenAI | null {
+    if (!aiClient && process.env.GEMINI_API_KEY) {
+      try {
+        aiClient = new GoogleGenAI({
+          apiKey: process.env.GEMINI_API_KEY,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Failed to initialize GoogleGenAI client:", err);
       }
     }
-  });
+    return aiClient;
+  }
+
+  // Helper for resilient content generation with retry and cascade fallback
+  async function generateContentWithRetryAndCascade(
+    ai: GoogleGenAI,
+    prompt: string,
+    systemInstruction: string
+  ): Promise<string> {
+    const modelsToTry = [
+      "gemini-3.5-flash",
+      "gemini-3.1-flash-lite"
+    ];
+
+    const maxRetriesPerModel = 2;
+    const baseDelayMs = 1000; // ms
+
+    let lastError: any = null;
+
+    for (const modelName of modelsToTry) {
+      let attempt = 0;
+      while (attempt <= maxRetriesPerModel) {
+        try {
+          console.log(`[Gemini Request] Querying model ${modelName} (Attempt ${attempt + 1}/${maxRetriesPerModel + 1})...`);
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: {
+              systemInstruction: systemInstruction,
+              temperature: 0.7,
+            }
+          });
+
+          if (response && response.text) {
+            console.log(`[Gemini Request] Success with model: ${modelName}`);
+            return response.text;
+          } else {
+            throw new Error(`Empty response returned from model ${modelName}`);
+          }
+        } catch (error: any) {
+          attempt++;
+          lastError = error;
+          
+          const status = error?.status || (error?.error?.code);
+          const message = error?.message || error?.error?.message || String(error);
+          
+          const isRetryable = 
+            status === 503 ||
+            status === 429 ||
+            status === 500 ||
+            message.includes("503") ||
+            message.includes("429") ||
+            message.includes("500") ||
+            message.toLowerCase().includes("unavailable") ||
+            message.toLowerCase().includes("exhausted") ||
+            message.toLowerCase().includes("rate limit") ||
+            message.toLowerCase().includes("temporary") ||
+            message.toLowerCase().includes("overloaded");
+
+          if (isRetryable && attempt <= maxRetriesPerModel) {
+            const delay = baseDelayMs * Math.pow(2, attempt - 1);
+            console.warn(`[Gemini API Warning] Retryable status ${status} / error: "${message}" on model ${modelName}. Retrying in ${delay}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          } else {
+            console.warn(`[Gemini API Error] Failed on model ${modelName} with message: "${message}". Current attempt: ${attempt}. Re-routing to fallback/next model if available...`);
+            break; // Break the inner retry loop, try next model in the cascade
+          }
+        }
+      }
+    }
+
+    throw lastError || new Error("All cascade models failed or were exhausted.");
+  }
 
   // API Route for generating explanations
   app.post("/api/explain", async (req, res) => {
@@ -85,48 +166,27 @@ Create a table with exact numeric data showing how the object changed over time 
 - Other relevant numeric metrics
 
 ### Response Format:
-Use clear headings, bullet points, and tables. Always end with a question to continue the conversation.`;
+- Use clear headings, bullet points, and tables.
+- ALWAYS format mathematical equations, physics derivations (such as Einstein's field equation, Schrödinger, thermodynamics, quantum energy transitions, etc.), chemical equations, molecular structures, and nuclear reaction formulas using standard LaTeX.
+  - Use display math blocks $$...$$ for large or standalone equations, matrices, or systems of formulas.
+  - Use inline math $...$ for chemical symbols, chemical reactions (e.g. $2H_2 + O_2 \rightarrow 2H_2O$), physical variables, and mathematical symbols in running text (e.g. $E=mc^2$).
+  - Never output raw unrendered backslash symbols or raw double braces. Ensure everything adheres strictly to standard, clean LaTeX math mode.
+- Always end with a question to continue the conversation.`;
 
       const prompt = `**Topic to explain:** ${topic}\n\n**Additional requirements:** ${additionalRequirements || "None"}`;
 
       let responseText = "";
+      const ai = getAiClient();
 
-      try {
-        // Try the highly scalable gemini-3.1-flash-lite model first to avoid low free-tier quotas
-        const response1 = await ai.models.generateContent({
-          model: "gemini-3.1-flash-lite",
-          contents: prompt,
-          config: {
-            systemInstruction: systemInstruction,
-            temperature: 0.7,
-          }
-        });
-        if (response1 && response1.text) {
-          responseText = response1.text;
-        } else {
-          throw new Error("Empty response from gemini-3.1-flash-lite");
-        }
-      } catch (firstError) {
-        console.warn("Highly scalable model (gemini-3.1-flash-lite) failed or exceeded quota. Re-routing to gemini-3.5-flash alternative...", firstError);
-        
+      if (!ai) {
+        console.warn("GEMINI_API_KEY not configured or empty. Serving high-fidelity offline fallbacks.");
+        responseText = generateOfflineGrokResponse(topic, additionalRequirements);
+      } else {
         try {
-          // Cascade to the secondary line
-          const response2 = await ai.models.generateContent({
-            model: "gemini-3.5-flash",
-            contents: prompt,
-            config: {
-              systemInstruction: systemInstruction,
-              temperature: 0.7,
-            }
-          });
-          if (response2 && response2.text) {
-            responseText = response2.text;
-          } else {
-            throw new Error("Empty response from gemini-3.5-flash");
-          }
-        } catch (secondError) {
+          responseText = await generateContentWithRetryAndCascade(ai, prompt, systemInstruction);
+        } catch (cascadeError) {
           // Safe robust localized fallback to keep the app working offline or when fully out of quota!
-          console.error("All online Gemini servers are fully exhausted or restricted. Dispensing bespoke local Grok-Style lesson fallback:", secondError);
+          console.error("All online Gemini servers are fully exhausted, restricted, or unavailable. Dispensing bespoke local Grok-Style lesson fallback:", cascadeError);
           responseText = generateOfflineGrokResponse(topic, additionalRequirements);
         }
       }

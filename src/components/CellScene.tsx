@@ -19,7 +19,7 @@ const Nucleus = ({ speedMultiplier }: { speedMultiplier: number }) => {
         <sphereGeometry args={[0.5, 32, 32]} />
         <meshStandardMaterial color="#818cf8" roughness={0.2} metalness={0.8} />
       </mesh>
-      {/* Nuclear Envelope */}
+      {/* Nuclear Envelope & pores */}
       <mesh position={[0, 0, 0]}>
         <sphereGeometry args={[1.5, 32, 32]} />
         <meshStandardMaterial color="#4f46e5" transparent opacity={0.4} roughness={0.1} metalness={0.1} wireframe={true} />
@@ -27,6 +27,44 @@ const Nucleus = ({ speedMultiplier }: { speedMultiplier: number }) => {
       <mesh position={[0, 0, 0]}>
         <sphereGeometry args={[1.48, 32, 32]} />
         <meshStandardMaterial color="#4338ca" transparent opacity={0.2} roughness={0.5} />
+      </mesh>
+    </group>
+  );
+};
+
+const EndoplasmicReticulum = ({ isDeath }: { isDeath: boolean }) => {
+  if (isDeath) return null;
+  return (
+    <group scale={[1.15, 1.15, 1.15]}>
+      {/* Rough Endoplasmic Reticulum layered folds surrounding nucleus */}
+      <mesh rotation={[0.4, 0.3, 0.1]}>
+        <torusGeometry args={[1.9, 0.06, 8, 32, Math.PI * 1.1]} />
+        <meshStandardMaterial color="#ec4899" roughness={0.6} transparent opacity={0.45} />
+      </mesh>
+      <mesh rotation={[-0.2, 0.5, 0.2]}>
+        <torusGeometry args={[2.2, 0.05, 8, 32, Math.PI * 1.3]} />
+        <meshStandardMaterial color="#ec4899" roughness={0.6} transparent opacity={0.35} />
+      </mesh>
+    </group>
+  );
+};
+
+const GolgiApparatus = ({ isDeath }: { isDeath: boolean }) => {
+  if (isDeath) return null;
+  return (
+    <group position={[-2.3, 1.4, -0.6]} rotation={[0.3, -0.4, 0.2]}>
+      {/* Stacked disks of Golgi cisternae */}
+      <mesh position={[0, 0.22, 0]} scale={[1, 0.14, 0.45]}>
+        <torusGeometry args={[0.75, 0.08, 6, 16, Math.PI]} />
+        <meshStandardMaterial color="#10b981" roughness={0.4} />
+      </mesh>
+      <mesh position={[0, 0.0, 0]} scale={[1, 0.14, 0.45]}>
+        <torusGeometry args={[0.65, 0.08, 6, 16, Math.PI]} />
+        <meshStandardMaterial color="#10b981" roughness={0.4} />
+      </mesh>
+      <mesh position={[0, -0.22, 0]} scale={[1, 0.14, 0.45]}>
+        <torusGeometry args={[0.55, 0.08, 6, 16, Math.PI]} />
+        <meshStandardMaterial color="#10b981" roughness={0.4} />
       </mesh>
     </group>
   );
@@ -41,11 +79,28 @@ const Mitochondrion = ({ position, rotation, isDeath }: { position: [number, num
           <capsuleGeometry args={[0.3, 0.8, 16, 32]} />
           <meshStandardMaterial color={isDeath ? '#475569' : '#f97316'} roughness={0.3} metalness={0.2} />
         </mesh>
-        {/* Inner membrane representation */}
+        {/* Inner folded cristae membrane plates */}
         <mesh>
           <capsuleGeometry args={[0.25, 0.7, 16, 16]} />
           <meshStandardMaterial color={isDeath ? '#64748b' : '#fdba74'} roughness={0.8} wireframe={true} opacity={0.3} transparent />
         </mesh>
+        
+        {!isDeath && (
+          <group position={[0, -0.1, 0]}>
+            <mesh position={[0, 0.3, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.35]}>
+              <torusGeometry args={[0.2, 0.03, 6, 12]} />
+              <meshBasicMaterial color="#fdba74" />
+            </mesh>
+            <mesh position={[0, 0.08, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.35]}>
+              <torusGeometry args={[0.2, 0.03, 6, 12]} />
+              <meshBasicMaterial color="#fdba74" />
+            </mesh>
+            <mesh position={[0, -0.14, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.35]}>
+              <torusGeometry args={[0.2, 0.03, 6, 12]} />
+              <meshBasicMaterial color="#fdba74" />
+            </mesh>
+          </group>
+        )}
       </group>
     </Float>
   );
@@ -109,6 +164,14 @@ export const CellScene = ({ embedded = false }: { embedded?: boolean }) => {
             <Nucleus speedMultiplier={speedMultiplier} />
           </group>
 
+          <group onClick={(e) => { e.stopPropagation(); setSelectedOrganelle('Endoplasmic Reticulum'); }}>
+            <EndoplasmicReticulum isDeath={isDeath} />
+          </group>
+
+          <group onClick={(e) => { e.stopPropagation(); setSelectedOrganelle('Golgi Apparatus'); }}>
+            <GolgiApparatus isDeath={isDeath} />
+          </group>
+
           <group onClick={(e) => { e.stopPropagation(); setSelectedOrganelle('Mitochondria'); }}>
             <Mitochondrion position={[2, 1, 1]} rotation={[0.5, 0, 0.2]} isDeath={isDeath} />
             <Mitochondrion position={[-2, -1.5, 0]} rotation={[-0.2, 1, -0.5]} isDeath={isDeath} />
@@ -141,6 +204,8 @@ export const CellScene = ({ embedded = false }: { embedded?: boolean }) => {
                   <h2 className="text-lg font-bold text-cyan-300 mb-1">{selectedOrganelle}</h2>
                   <p className="text-xs text-cyan-100/70 leading-relaxed">
                     {selectedOrganelle === 'Nucleus' && 'The control center of the cell, storing genetic information (DNA) and coordinating cell activities.'}
+                    {selectedOrganelle === 'Endoplasmic Reticulum' && 'A network of membranous tubules that assists in protein and lipid synthesis, folding, and transport. The rough ER is studded with ribosomes.'}
+                    {selectedOrganelle === 'Golgi Apparatus' && 'The dispatch station of the cell. It modifies, sorts, and packages proteins and lipids received from the ER for secretion or active transport.'}
                     {selectedOrganelle === 'Mitochondria' && 'The powerhouse of the cell, generating most of the chemical energy needed to power the cell\'s biochemical reactions via ATP.'}
                     {selectedOrganelle === 'Lysosome' && 'Contains digestive enzymes. They break down excess or worn-out cell parts and may be used to destroy invading viruses and bacteria.'}
                     {selectedOrganelle === 'Cell Membrane' && 'A semipermeable lipid bilayer that regulates what enters and exits the cell.'}

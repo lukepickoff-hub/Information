@@ -5,6 +5,18 @@ import * as THREE from 'three';
 import { useDashboardStore, DashboardId } from '../store/useDashboardStore';
 import { useAtomicStore } from '../store/useAtomicStore';
 import { ELEMENTS } from '../data/elements';
+import { 
+  createProceduralEarthTexture,
+  createProceduralMoonTexture,
+  createProceduralSunTexture,
+  createProceduralMercuryTexture,
+  createProceduralVenusTexture,
+  createProceduralMarsTexture,
+  createProceduralJupiterTexture,
+  createProceduralSaturnTexture,
+  createProceduralUranusTexture,
+  createProceduralNeptuneTexture
+} from '../utils/proceduralTextures';
 
 export const ATOM_IDS: DashboardId[] = [
   'hydrogen', 'helium', 'lithium', 'beryllium', 'boron',
@@ -337,6 +349,12 @@ const SpacetimeSun = () => {
   const innerRef = useRef<THREE.Mesh>(null);
   const outerRef = useRef<THREE.Mesh>(null);
 
+  const isSunActive = activeDashboardId === 'sun';
+
+  const texture = useMemo(() => {
+    return createProceduralSunTexture(isSunActive ? activeTimelineStep : 3);
+  }, [isSunActive, activeTimelineStep]);
+
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     if (innerRef.current) innerRef.current.rotation.y = t * 0.1;
@@ -346,11 +364,9 @@ const SpacetimeSun = () => {
     }
   });
 
-  const isSunActive = activeDashboardId === 'sun';
   const baseScale = isSunActive && activeTimelineStep === 5 ? 0.45 : isSunActive && activeTimelineStep === 4 ? 1.6 : 1.0;
-  const sunColor = isSunActive && activeTimelineStep === 5 ? '#e2f8ff' : isSunActive && activeTimelineStep === 4 ? '#ef4444' : '#facc15';
+  const sunColor = isSunActive && activeTimelineStep === 5 ? '#e2f8ff' : isSunActive && activeTimelineStep === 4 ? '#ff5555' : '#ffffff'; // white-base so texture colors register perfectly
   const emissiveColor = isSunActive && activeTimelineStep === 5 ? '#a5f3fc' : isSunActive && activeTimelineStep === 4 ? '#dc2626' : '#f59e0b';
-
 
   return (
     <group position={OBJECT_COORDS.sun} scale={[baseScale, baseScale, baseScale]}>
@@ -359,6 +375,7 @@ const SpacetimeSun = () => {
         <sphereGeometry args={[109, 64, 64]} />
         <meshStandardMaterial 
           color={sunColor} 
+          map={texture}
           roughness={0.1}
           emissive={new THREE.Color(emissiveColor)}
           emissiveIntensity={1.8}
@@ -402,6 +419,17 @@ const SpacetimePlanet = ({
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
 
+  const texture = useMemo(() => {
+    if (id === 'mercury') return createProceduralMercuryTexture();
+    if (id === 'venus') return createProceduralVenusTexture();
+    if (id === 'mars') return createProceduralMarsTexture();
+    if (id === 'jupiter') return createProceduralJupiterTexture();
+    if (id === 'saturn') return createProceduralSaturnTexture();
+    if (id === 'uranus') return createProceduralUranusTexture();
+    if (id === 'neptune') return createProceduralNeptuneTexture();
+    return null;
+  }, [id]);
+
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     if (meshRef.current) meshRef.current.rotation.y = t * rotationSpeed;
@@ -411,12 +439,17 @@ const SpacetimePlanet = ({
     <DynamicPosition id={id}>
       <mesh ref={meshRef} castShadow receiveShadow>
         <sphereGeometry args={[radius, 32, 32]} />
-        <meshStandardMaterial color={color} roughness={0.6} />
+        <meshStandardMaterial 
+          color={texture ? '#ffffff' : color} 
+          map={texture || undefined}
+          roughness={id === 'jupiter' || id === 'saturn' ? 0.2 : 0.6} 
+          metalness={id === 'jupiter' || id === 'saturn' ? 0.05 : 0.1}
+        />
       </mesh>
       {hasRings && (
         <mesh rotation={[Math.PI / 2 + 0.3, 0, 0]}>
           <ringGeometry args={[radius * 1.4, radius * 2.2, 64]} />
-          <meshBasicMaterial color="#d4d4ca" transparent opacity={0.6} side={THREE.DoubleSide} />
+          <meshBasicMaterial color="#d4d4ca" transparent opacity={0.65} side={THREE.DoubleSide} />
         </mesh>
       )}
     </DynamicPosition>
@@ -429,6 +462,12 @@ const SpacetimeEarth = () => {
   const earthRef = useRef<THREE.Mesh>(null);
   const cloudRef = useRef<THREE.Mesh>(null);
 
+  const isEarthActive = activeDashboardId === 'earth';
+
+  const texture = useMemo(() => {
+    return createProceduralEarthTexture(isEarthActive ? activeTimelineStep : 3);
+  }, [isEarthActive, activeTimelineStep]);
+
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     if (earthRef.current) earthRef.current.rotation.y = t * 0.06;
@@ -438,9 +477,7 @@ const SpacetimeEarth = () => {
     }
   });
 
-  const isEarthActive = activeDashboardId === 'earth';
-  const earthColor = isEarthActive && activeTimelineStep === 1 ? '#ea580c' : isEarthActive && activeTimelineStep === 5 ? '#78716c' : '#1e3a8a';
-
+  const earthColor = isEarthActive && activeTimelineStep === 1 ? '#ea580c' : isEarthActive && activeTimelineStep === 5 ? '#78716c' : '#ffffff'; // white-base to let map shine bright and clear
 
   return (
     <DynamicPosition id="earth">
@@ -449,8 +486,9 @@ const SpacetimeEarth = () => {
         <sphereGeometry args={[1.0, 32, 32]} />
         <meshStandardMaterial 
           color={earthColor}
+          map={texture}
           roughness={0.4}
-          metalness={0.1}
+          metalness={0.15}
           emissive={new THREE.Color(isEarthActive && activeTimelineStep === 1 ? '#f97316' : '#000000')}
           emissiveIntensity={isEarthActive && activeTimelineStep === 1 ? 1.5 : 0}
         />
@@ -460,10 +498,10 @@ const SpacetimeEarth = () => {
         <mesh ref={cloudRef}>
           <sphereGeometry args={[1.02, 32, 32]} />
           <meshStandardMaterial 
-            color="#10b981" 
+            color="#ffffff" 
             transparent 
-            opacity={0.35} 
-            roughness={0.8}
+            opacity={0.25} 
+            roughness={0.9}
           />
         </mesh>
       )}
@@ -484,8 +522,11 @@ const SpacetimeEarth = () => {
 
 // 3. Lunar Satellite with Crater Geometry (The Moon)
 const SpacetimeMoon = () => {
-  const { activeTimelineStep } = useDashboardStore();
   const moonRef = useRef<THREE.Mesh>(null);
+
+  const texture = useMemo(() => {
+    return createProceduralMoonTexture();
+  }, []);
 
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
@@ -496,7 +537,7 @@ const SpacetimeMoon = () => {
     <DynamicPosition id="moon">
       <mesh ref={moonRef}>
         <sphereGeometry args={[0.27, 24, 24]} />
-        <meshStandardMaterial color="#8a8d91" roughness={0.9} />
+        <meshStandardMaterial color="#ffffff" map={texture} roughness={0.9} />
       </mesh>
     </DynamicPosition>
   );
@@ -558,14 +599,68 @@ const SpacetimeAtom = ({ id, atomicNumber }: { id: DashboardId, atomicNumber: nu
           ))}
         </group>
 
-        {/* Electron Orbit Shells */}
+        {/* --- QUANTUM MECHANICS MODEL: Probability Electron Clouds --- */}
+        {/* 1s spherical orbital cloud density */}
+        <mesh>
+          <sphereGeometry args={[0.9, 16, 16]} />
+          <meshBasicMaterial color={element.color} transparent opacity={0.08} blending={THREE.AdditiveBlending} />
+        </mesh>
+
+        {/* 2s spherical orbital cloud density (rendered for elements with elements in n=2 shell) */}
+        {element.atomicNumber > 2 && (
+          <mesh>
+            <sphereGeometry args={[1.8, 20, 20]} />
+            <meshBasicMaterial color={element.color} transparent opacity={0.04} blending={THREE.AdditiveBlending} />
+          </mesh>
+        )}
+
+        {/* 2p dumbbell orbital clouds (dumbbell shapes along X, Y, Z coordinates for p-block elements) */}
+        {element.atomicNumber >= 5 && (
+          <group>
+            {/* 2px orbital lobe pair along X axis */}
+            <group rotation={[0, 0, 0]}>
+              <mesh position={[-1.7, 0, 0]}>
+                <sphereGeometry args={[0.42, 12, 12]} />
+                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+              </mesh>
+              <mesh position={[1.7, 0, 0]}>
+                <sphereGeometry args={[0.42, 12, 12]} />
+                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+              </mesh>
+            </group>
+            {/* 2py orbital lobe pair along Y axis */}
+            <group rotation={[0, 0, Math.PI / 2]}>
+              <mesh position={[-1.7, 0, 0]}>
+                <sphereGeometry args={[0.42, 12, 12]} />
+                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+              </mesh>
+              <mesh position={[1.7, 0, 0]}>
+                <sphereGeometry args={[0.42, 12, 12]} />
+                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+              </mesh>
+            </group>
+            {/* 2pz orbital lobe pair along Z axis */}
+            <group rotation={[0, Math.PI / 2, 0]}>
+              <mesh position={[-1.7, 0, 0]}>
+                <sphereGeometry args={[0.42, 12, 12]} />
+                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+              </mesh>
+              <mesh position={[1.7, 0, 0]}>
+                <sphereGeometry args={[0.42, 12, 12]} />
+                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+              </mesh>
+            </group>
+          </group>
+        )}
+
+        {/* Bohr classical ring tracks for visual contrast indicator */}
         {element.electrons.map((count, shellIdx) => {
           const shellRadius = 1.4 + shellIdx * 0.9;
           return (
             <group key={shellIdx}>
               <mesh rotation={[Math.PI / 2 + (shellIdx * 0.15), (shellIdx * 0.2), 0]}>
-                <ringGeometry args={[shellRadius, shellRadius + 0.04, 48]} />
-                <meshBasicMaterial color={element.color} opacity={0.15 - shellIdx * 0.02} transparent side={THREE.DoubleSide} />
+                <ringGeometry args={[shellRadius, shellRadius + 0.02, 48]} />
+                <meshBasicMaterial color={element.color} opacity={0.12 - shellIdx * 0.02} transparent side={THREE.DoubleSide} />
               </mesh>
               {Array.from({ length: count }).map((_, i) => (
                 <ElectronTrack 
@@ -593,42 +688,66 @@ const SpacetimeCell = () => {
     <DynamicPosition id="mitochondria">
       <group scale={0.001}>
         {/* Outer Membrane with high-contrast scientific grid lines */}
-      <mesh>
-        <sphereGeometry args={[2.8, 24, 24]} />
-        <meshStandardMaterial 
-          color={isDeath ? '#475569' : '#0ea5e9'} 
-          transparent 
-          opacity={isDeath ? 0.04 : 0.15} 
-          wireframe={true} 
-          roughness={0.1}
-        />
-      </mesh>
-
-      {/* Main Mitochondria Core */}
-      <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>
-        <group scale={[0.8, 0.8, 0.8]}>
-          <mesh>
-            <capsuleGeometry args={[0.35, 1.0, 12, 16]} />
-            <meshStandardMaterial color={isDeath ? '#475569' : '#f97316'} roughness={0.3} />
-          </mesh>
-          <mesh>
-            <capsuleGeometry args={[0.3, 0.9, 12, 12]} />
-            <meshStandardMaterial color={isDeath ? '#64748b' : '#fdba74'} wireframe opacity={0.3} transparent />
-          </mesh>
-        </group>
-      </Float>
-
-      {/* Cytoplasmic Lysosome Elements */}
-      <Float speed={1.5} floatIntensity={0.3}>
-        <mesh position={[1.2, -1.0, 0.8]}>
-          <sphereGeometry args={[0.15, 12, 12]} />
-          <meshStandardMaterial color="#fcd34d" />
+        <mesh>
+          <sphereGeometry args={[2.8, 24, 24]} />
+          <meshStandardMaterial 
+            color={isDeath ? '#475569' : '#0ea5e9'} 
+            transparent 
+            opacity={isDeath ? 0.04 : 0.15} 
+            wireframe={true} 
+            roughness={0.1}
+          />
         </mesh>
-        <mesh position={[-1.2, 0.8, -0.6]}>
-          <sphereGeometry args={[0.15, 12, 12]} />
-          <meshStandardMaterial color="#3b82f6" />
-        </mesh>
-      </Float>
+
+        {/* Main Mitochondria Core */}
+        <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>
+          <group scale={[0.8, 0.8, 0.8]}>
+            {/* Outer Capsule membrane */}
+            <mesh>
+              <capsuleGeometry args={[0.35, 1.0, 12, 16]} />
+              <meshStandardMaterial color={isDeath ? '#475569' : '#f97316'} roughness={0.4} />
+            </mesh>
+            {/* Inner folded membrane representing CRISTAE geometry */}
+            <mesh>
+              <capsuleGeometry args={[0.3, 0.9, 12, 12]} />
+              <meshStandardMaterial color={isDeath ? '#64748b' : '#fdba74'} wireframe opacity={0.3} transparent />
+            </mesh>
+            
+            {/* Highly realistic internal folded cristae plates */}
+            {!isDeath && (
+              <group position={[0, -0.1, 0]}>
+                <mesh position={[0, 0.35, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.3]}>
+                  <torusGeometry args={[0.22, 0.04, 8, 16]} />
+                  <meshBasicMaterial color="#fdba74" />
+                </mesh>
+                <mesh position={[0, 0.1, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.3]}>
+                  <torusGeometry args={[0.22, 0.04, 8, 16]} />
+                  <meshBasicMaterial color="#fdba74" />
+                </mesh>
+                <mesh position={[0, -0.15, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.3]}>
+                  <torusGeometry args={[0.22, 0.04, 8, 16]} />
+                  <meshBasicMaterial color="#fdba74" />
+                </mesh>
+                <mesh position={[0, -0.4, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.3]}>
+                  <torusGeometry args={[0.22, 0.04, 8, 16]} />
+                  <meshBasicMaterial color="#fdba74" />
+                </mesh>
+              </group>
+            )}
+          </group>
+        </Float>
+
+        {/* Cytoplasmic Lysosome Elements */}
+        <Float speed={1.5} floatIntensity={0.3}>
+          <mesh position={[1.2, -1.0, 0.8]}>
+            <sphereGeometry args={[0.15, 12, 12]} />
+            <meshStandardMaterial color="#fcd34d" />
+          </mesh>
+          <mesh position={[-1.2, 0.8, -0.6]}>
+            <sphereGeometry args={[0.15, 12, 12]} />
+            <meshStandardMaterial color="#3b82f6" />
+          </mesh>
+        </Float>
       </group>
     </DynamicPosition>
   );
@@ -653,17 +772,64 @@ const SpacetimeEukaryoticCell = () => {
           />
         </mesh>
         
-        {/* Nucleus Core inside the cell with inner nuclear chromatin wire */}
+        {/* Nucleus Core inside the cell with inner nuclear chromatin wire and Nuclear Pores */}
         <group scale={[0.8, 0.8, 0.8]}>
           <mesh>
             <sphereGeometry args={[1.0, 24, 24]} />
             <meshStandardMaterial color={isDeath ? '#6b7280' : '#818cf8'} roughness={0.5} />
           </mesh>
+          {/* Double membrane layer representation */}
           <mesh>
-            <sphereGeometry args={[0.98, 24, 24]} />
-            <meshStandardMaterial color="#4f46e5" transparent opacity={0.25} wireframe />
+            <sphereGeometry args={[1.05, 24, 24]} />
+            <meshStandardMaterial color={isDeath ? '#4b5563' : '#4f46e5'} transparent opacity={0.2} wireframe />
           </mesh>
+          {/* Nuclear dot pores */}
+          {!isDeath && (
+            <group>
+              {Array.from({ length: 8 }).map((_, i) => {
+                const angle = (i / 8) * Math.PI * 2;
+                return (
+                  <mesh key={i} position={[Math.cos(angle) * 1.01, Math.sin(angle) * 0.4, Math.sin(angle) * 0.9]}>
+                    <sphereGeometry args={[0.08, 6, 6]} />
+                    <meshBasicMaterial color="#312e81" />
+                  </mesh>
+                );
+              })}
+            </group>
+          )}
         </group>
+
+        {/* --- Endoplasmic Reticulum (ER) folded sheets surrounding the Nucleus --- */}
+        {!isDeath && (
+          <group scale={[0.8, 0.8, 0.8]}>
+            <mesh rotation={[0.3, 0.2, 0]}>
+              <torusGeometry args={[1.45, 0.05, 8, 24, Math.PI * 1.2]} />
+              <meshStandardMaterial color="#ec4899" roughness={0.6} transparent opacity={0.4} />
+            </mesh>
+            <mesh rotation={[-0.4, 0.5, 0.3]}>
+              <torusGeometry args={[1.7, 0.04, 8, 24, Math.PI * 1.4]} />
+              <meshStandardMaterial color="#ec4899" roughness={0.6} transparent opacity={0.3} />
+            </mesh>
+          </group>
+        )}
+
+        {/* --- Golgi Apparatus Stacks --- */}
+        {!isDeath && (
+          <group position={[1.5, -1.1, 0.6]} rotation={[0.4, 0.2, -0.3]}>
+            <mesh position={[0, 0.14, 0]} scale={[1, 0.14, 0.4]}>
+              <torusGeometry args={[0.5, 0.08, 6, 12, Math.PI]} />
+              <meshStandardMaterial color="#10b981" roughness={0.4} />
+            </mesh>
+            <mesh position={[0, 0.0, 0]} scale={[1, 0.14, 0.4]}>
+              <torusGeometry args={[0.43, 0.08, 6, 12, Math.PI]} />
+              <meshStandardMaterial color="#10b981" roughness={0.4} />
+            </mesh>
+            <mesh position={[0, -0.14, 0]} scale={[1, 0.14, 0.4]}>
+              <torusGeometry args={[0.36, 0.08, 6, 12, Math.PI]} />
+              <meshStandardMaterial color="#10b981" roughness={0.4} />
+            </mesh>
+          </group>
+        )}
 
         {/* Floating Mitochondria organelles within the cytoplasm */}
         <Float speed={1.8} rotationIntensity={0.3} floatIntensity={0.2}>
@@ -672,6 +838,13 @@ const SpacetimeEukaryoticCell = () => {
               <capsuleGeometry args={[0.3, 0.8, 8, 16]} />
               <meshStandardMaterial color={isDeath ? '#4b5563' : '#f97316'} roughness={0.3} />
             </mesh>
+            {/* folded inner mitochondria cristae stripes visual */}
+            {!isDeath && (
+              <mesh position={[0, 0, 0]} scale={[0.85, 0.85, 0.85]}>
+                <capsuleGeometry args={[0.25, 0.7, 8, 10]} />
+                <meshStandardMaterial color="#fdba74" wireframe transparent opacity={0.5} />
+              </mesh>
+            )}
           </group>
           <group position={[-1.2, -1.0, 0.6]} scale={[0.4, 0.4, 0.4]}>
             <mesh>
@@ -681,7 +854,7 @@ const SpacetimeEukaryoticCell = () => {
           </group>
         </Float>
 
-        {/* Small lysosome spheres */}
+        {/* Small lysosome spheres and ribosomal dot particles */}
         <Float speed={1.2} floatIntensity={0.4}>
           <mesh position={[-1.5, 1.2, 0.4]}>
             <sphereGeometry args={[0.18, 12, 12]} />
@@ -691,6 +864,23 @@ const SpacetimeEukaryoticCell = () => {
             <sphereGeometry args={[0.15, 12, 12]} />
             <meshStandardMaterial color={isDeath ? '#4b5563' : '#ec4899'} />
           </mesh>
+          {/* Ribosomal points */}
+          {!isDeath && (
+            <group>
+              <mesh position={[-0.8, 1.2, -0.5]}>
+                <sphereGeometry args={[0.05, 4, 4]} />
+                <meshBasicMaterial color="#eab308" />
+              </mesh>
+              <mesh position={[0.5, 1.4, 0.6]}>
+                <sphereGeometry args={[0.05, 4, 4]} />
+                <meshBasicMaterial color="#eab308" />
+              </mesh>
+              <mesh position={[-0.6, -1.2, 0.8]}>
+                <sphereGeometry args={[0.05, 4, 4]} />
+                <meshBasicMaterial color="#eab308" />
+              </mesh>
+            </group>
+          )}
         </Float>
       </group>
     </DynamicPosition>
@@ -705,20 +895,20 @@ const SpacetimeSkeleton = () => {
   // Static anatomical nodes layout centered locally
   const localNodes = useMemo(() => [
     { id: 'head', pos: [0, 2.2, 0], radius: 0.22 },
-    { id: 'chest', pos: [0, 1.4, 0], radius: 0.35 },
-    { id: 'pelvis', pos: [0, 0.5, 0], radius: 0.28 },
-    { id: 'l_shoulder', pos: [-0.6, 1.4, 0], radius: 0.1 },
-    { id: 'l_elbow', pos: [-0.9, 0.6, 0], radius: 0.08 },
-    { id: 'l_hand', pos: [-1.0, -0.1, 0], radius: 0.06 },
-    { id: 'r_shoulder', pos: [0.6, 1.4, 0], radius: 0.1 },
-    { id: 'r_elbow', pos: [0.9, 0.6, 0], radius: 0.08 },
-    { id: 'r_hand', pos: [1.0, -0.1, 0], radius: 0.06 },
-    { id: 'l_hip', pos: [-0.3, 0.3, 0], radius: 0.12 },
-    { id: 'l_knee', pos: [-0.4, -0.6, 0], radius: 0.09 },
-    { id: 'l_foot', pos: [-0.4, -1.5, 0], radius: 0.07 },
-    { id: 'r_hip', pos: [0.3, 0.3, 0], radius: 0.12 },
-    { id: 'r_knee', pos: [0.4, -0.6, 0], radius: 0.09 },
-    { id: 'r_foot', pos: [0.4, -1.5, 0], radius: 0.07 },
+    { id: 'chest', pos: [0, 1.4, 0], radius: 0.15 },
+    { id: 'pelvis', pos: [0, 0.5, 0], radius: 0.2 },
+    { id: 'l_shoulder', pos: [-0.6, 1.4, 0], radius: 0.08 },
+    { id: 'l_elbow', pos: [-0.9, 0.6, 0], radius: 0.06 },
+    { id: 'l_hand', pos: [-1.0, -0.1, 0], radius: 0.05 },
+    { id: 'r_shoulder', pos: [0.6, 1.4, 0], radius: 0.08 },
+    { id: 'r_elbow', pos: [0.9, 0.6, 0], radius: 0.06 },
+    { id: 'r_hand', pos: [1.0, -0.1, 0], radius: 0.05 },
+    { id: 'l_hip', pos: [-0.3, 0.3, 0], radius: 0.09 },
+    { id: 'l_knee', pos: [-0.4, -0.6, 0], radius: 0.07 },
+    { id: 'l_foot', pos: [-0.4, -1.5, 0], radius: 0.06 },
+    { id: 'r_hip', pos: [0.3, 0.3, 0], radius: 0.09 },
+    { id: 'r_knee', pos: [0.4, -0.6, 0], radius: 0.07 },
+    { id: 'r_foot', pos: [0.4, -1.5, 0], radius: 0.06 },
   ], []);
 
   const connections = useMemo(() => [
@@ -741,29 +931,88 @@ const SpacetimeSkeleton = () => {
   return (
     <DynamicPosition id="skeleton">
       <group scale={0.01}>
-        {/* Node joints */}
-      {localNodes.map((n) => (
-        <mesh key={n.id} position={n.pos as [number, number, number]}>
-          <sphereGeometry args={[n.radius, 12, 12]} />
-          <meshBasicMaterial color={isDeath ? '#475569' : '#22d3ee'} transparent opacity={isDeath ? 0.2 : 0.8} />
-        </mesh>
-      ))}
+        {/* --- Skull Structure: Cranium + Mandible --- */}
+        <group position={[0, 2.2, 0]}>
+          <mesh>
+            <sphereGeometry args={[0.22, 16, 16]} />
+            <meshStandardMaterial color={isDeath ? '#475569' : '#e2e8f0'} roughness={0.7} />
+          </mesh>
+          <mesh position={[0, -0.12, 0.08]} scale={[0.13, 0.1, 0.1]}>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshStandardMaterial color={isDeath ? '#475569' : '#cbd5e1'} roughness={0.7} />
+          </mesh>
+        </group>
 
-      {/* Structural bone polyline grids */}
-      {connections.map((conn, i) => {
-        const start = localNodes.find((n) => n.id === conn[0])!;
-        const end = localNodes.find((n) => n.id === conn[1])!;
-        return (
-          <Line
-            key={i}
-            points={[start.pos as [number, number, number], end.pos as [number, number, number]]}
-            color={isDeath ? '#475569' : '#22d3ee'}
-            lineWidth={3}
-            transparent
-            opacity={isDeath ? 0.1 : 0.5}
-          />
-        );
-      })}
+        {/* --- Segmented Spinal Column (Vertebrae) --- */}
+        <group>
+          {Array.from({ length: 7 }).map((_, idx) => {
+            const y = 0.5 + (idx / 6) * (1.45 - 0.5);
+            return (
+              <mesh key={idx} position={[0, y, 0]} scale={[0.12, 0.04, 0.08]}>
+                <boxGeometry args={[1, 1, 1]} />
+                <meshStandardMaterial color={isDeath ? '#475569' : '#f1f5f9'} roughness={0.7} />
+              </mesh>
+            );
+          })}
+        </group>
+
+        {/* --- Horizontal Ribcage Hoops --- */}
+        {!isDeath && (
+          <group position={[0, 1.35, 0]}>
+            <mesh position={[0, 0.25, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.7, 1]}>
+              <torusGeometry args={[0.3, 0.02, 6, 24]} />
+              <meshBasicMaterial color="#e2e8f0" transparent opacity={0.65} />
+            </mesh>
+            <mesh position={[0, 0.10, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.75, 1]}>
+              <torusGeometry args={[0.35, 0.02, 6, 24]} />
+              <meshBasicMaterial color="#e2e8f0" transparent opacity={0.65} />
+            </mesh>
+            <mesh position={[0, -0.05, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.78, 1]}>
+              <torusGeometry args={[0.36, 0.02, 6, 24]} />
+              <meshBasicMaterial color="#e2e8f0" transparent opacity={0.65} />
+            </mesh>
+            <mesh position={[0, -0.20, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.7, 1]}>
+              <torusGeometry args={[0.28, 0.02, 6, 24]} />
+              <meshBasicMaterial color="#e2e8f0" transparent opacity={0.65} />
+            </mesh>
+          </group>
+        )}
+
+        {/* --- Pelvis bone girdle --- */}
+        <group position={[0, 0.5, 0]} scale={[1.4, 0.4, 0.7]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.22, 0.05, 6, 24]} />
+            <meshStandardMaterial color={isDeath ? '#475569' : '#cbd5e1'} roughness={0.8} />
+          </mesh>
+        </group>
+
+        {/* Node joint spheres */}
+        {localNodes.map((n) => {
+          // Skip drawing basic standard spheres for head, chest, pelvis since we built 3D anatomical models for them!
+          if (n.id === 'head' || n.id === 'chest' || n.id === 'pelvis') return null;
+          return (
+            <mesh key={n.id} position={n.pos as [number, number, number]}>
+              <sphereGeometry args={[n.radius, 12, 12]} />
+              <meshBasicMaterial color={isDeath ? '#475569' : '#e2e8f0'} transparent opacity={isDeath ? 0.2 : 0.8} />
+            </mesh>
+          );
+        })}
+
+        {/* Structural bone polyline grids */}
+        {connections.map((conn, i) => {
+          const start = localNodes.find((n) => n.id === conn[0])!;
+          const end = localNodes.find((n) => n.id === conn[1])!;
+          return (
+            <Line
+              key={i}
+              points={[start.pos as [number, number, number], end.pos as [number, number, number]]}
+              color={isDeath ? '#475569' : '#e2e8f0'}
+              lineWidth={3}
+              transparent
+              opacity={isDeath ? 0.1 : 0.5}
+            />
+          );
+        })}
       </group>
     </DynamicPosition>
   );

@@ -98,10 +98,72 @@ export const AnatomyScene = ({ embedded = false }: { embedded?: boolean }) => {
                 <Stars radius={100} depth={50} count={isDeath ? 100 : 800} factor={2} saturation={0} fade speed={0.5} />
                 
                 <group position={[0, -1, 0]}>
+                    {/* Custom 3D Anatomical Mesh Overlays for Skeletal System */}
+                    {system === 'skeletal' && !isDeath && (
+                      <group>
+                        {/* Detailed 3D Skull Overlay */}
+                        <group position={[0, 4.5, 0]}>
+                          <mesh>
+                            <sphereGeometry args={[0.32, 16, 16]} />
+                            <meshStandardMaterial color="#e2e8f0" roughness={0.7} />
+                          </mesh>
+                          <mesh position={[0, -0.2, 0.12]} scale={[0.18, 0.15, 0.15]}>
+                            <boxGeometry args={[1, 1, 1]} />
+                            <meshStandardMaterial color="#cbd5e1" roughness={0.7} />
+                          </mesh>
+                        </group>
+
+                        {/* Segmented Spinal Column (Ventral Vertebrae discs) */}
+                        <group>
+                          {Array.from({ length: 8 }).map((_, idx) => {
+                            const y = 1.4 + (idx / 7) * (3.5 - 1.4);
+                            return (
+                              <mesh key={idx} position={[0, y, 0]} scale={[0.2, 0.05, 0.15]}>
+                                <boxGeometry args={[1, 1, 1]} />
+                                <meshStandardMaterial color="#f8fafc" roughness={0.7} />
+                              </mesh>
+                            );
+                          })}
+                        </group>
+
+                        {/* Stacking 3D Ribcage hoops */}
+                        <group position={[0, 2.9, 0]}>
+                          <mesh position={[0, 0.35, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.7, 1]}>
+                            <torusGeometry args={[0.48, 0.03, 6, 24]} />
+                            <meshBasicMaterial color="#e2e8f0" transparent opacity={0.65} />
+                          </mesh>
+                          <mesh position={[0, 0.12, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.75, 1]}>
+                            <torusGeometry args={[0.55, 0.03, 6, 24]} />
+                            <meshBasicMaterial color="#e2e8f0" transparent opacity={0.65} />
+                          </mesh>
+                          <mesh position={[0, -0.10, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.78, 1]}>
+                            <torusGeometry args={[0.56, 0.03, 6, 24]} />
+                            <meshBasicMaterial color="#e2e8f0" transparent opacity={0.65} />
+                          </mesh>
+                          <mesh position={[0, -0.32, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.7, 1]}>
+                            <torusGeometry args={[0.42, 0.03, 6, 24]} />
+                            <meshBasicMaterial color="#e2e8f0" transparent opacity={0.65} />
+                          </mesh>
+                        </group>
+
+                        {/* Broad Pelvic girdle */}
+                        <group position={[0, 1.4, 0]} scale={[1.4, 0.35, 0.75]}>
+                          <mesh rotation={[Math.PI / 2, 0, 0]}>
+                            <torusGeometry args={[0.35, 0.08, 6, 24]} />
+                            <meshStandardMaterial color="#cbd5e1" roughness={0.8} />
+                          </mesh>
+                        </group>
+                      </group>
+                    )}
+
                     {/* Nodes representing organs/joints */}
-                    {nodes.map(node => (
-                        <PulsingNode key={node.id} pos={node.pos} radius={node.radius} color={getSystemColor()} isDeath={isDeath} />
-                    ))}
+                    {nodes.map(node => {
+                        const isSkeletalDetailNode = system === 'skeletal' && !isDeath && ['head', 'neck', 'chest', 'pelvis'].includes(node.id);
+                        if (isSkeletalDetailNode) return null;
+                        return (
+                            <PulsingNode key={node.id} pos={node.pos} radius={node.radius} color={getSystemColor()} isDeath={isDeath} />
+                        );
+                    })}
 
                     {/* Connections representing nerves/vessels/bones */}
                     {connections.map((conn, i) => {

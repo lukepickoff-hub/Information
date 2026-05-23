@@ -3,6 +3,11 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Stars, Html, Grid } from '@react-three/drei';
 import * as THREE from 'three';
 import { useDashboardStore } from '../store/useDashboardStore';
+import { 
+  createProceduralEarthTexture, 
+  createProceduralMoonTexture, 
+  createProceduralSunTexture 
+} from '../utils/proceduralTextures';
 
 // Circular Orbit track helper
 const SimpleOrbitTrack = ({ radius, color = '#22d3ee' }: { radius: number; color?: string }) => {
@@ -137,8 +142,15 @@ const Globe = () => {
       if (activeTimelineStep === 4) return '#ef4444'; // Red Giant shell swell
       return '#facc15'; // Brilliant yellow main-sequence G-star
     }
-    return isMoon ? '#8a8d91' : '#1e3a8a'; // Moon slate or Earth ocean-blue
+    return isMoon ? '#8a8d91' : '#ffffff'; // Use full white maps base so procedural texture colors register accurately!
   }, [activeTimelineStep, isMoon, isSun]);
+
+  const proceduralTextureMap = useMemo(() => {
+    if (isSun) return createProceduralSunTexture(activeTimelineStep);
+    if (isMoon) return createProceduralMoonTexture();
+    if (activeDashboardId === 'earth') return createProceduralEarthTexture(activeTimelineStep);
+    return null;
+  }, [activeDashboardId, isSun, isMoon, activeTimelineStep]);
 
   const emissiveColor = useMemo(() => {
     if (isSun) {
@@ -169,8 +181,9 @@ const Globe = () => {
         <sphereGeometry args={[2.2, 64, 64]} />
         <meshStandardMaterial 
           color={globeColor}
+          map={proceduralTextureMap || undefined}
           roughness={isMoon ? 0.9 : (isSun ? 0.05 : 0.4)}
-          metalness={isSun ? 0.0 : 0.1}
+          metalness={isSun ? 0.0 : 0.15}
           emissive={new THREE.Color(emissiveColor)}
           emissiveIntensity={emissiveIntensity}
         />
@@ -184,11 +197,11 @@ const Globe = () => {
         <mesh ref={cloudRef}>
           <sphereGeometry args={[2.25, 64, 64]} />
           <meshStandardMaterial 
-            color="#10b981" 
+            color="#ffffff" 
             transparent 
-            opacity={0.35} 
+            opacity={0.25} 
             wireframe={activeTimelineStep === 4}
-            roughness={0.8}
+            roughness={0.9}
           />
         </mesh>
       )}

@@ -1,9 +1,21 @@
-import React, { useRef, useMemo, useState } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Stars, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useAtomicStore } from '../store/useAtomicStore';
 import { ElementData } from '../data/elements';
+import { 
+  LineChart, 
+  Line as RechartsLine, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip as ChartTooltip, 
+  ResponsiveContainer, 
+  ReferenceLine, 
+  ReferenceDot 
+} from 'recharts';
+import { Play, Pause, RotateCcw, Activity } from 'lucide-react';
 
 // Hardcoded electronegativity values for Elements 1 to 36 for high-fidelity accuracy
 const getElectronegativity = (num: number): number => {
@@ -181,6 +193,60 @@ const AtomModel = ({ element, position, fadeOutOutermost = false }: { element: E
                   <meshBasicMaterial color="#ef4444" transparent opacity={0.1} blending={THREE.AdditiveBlending} />
                 </mesh>
             </group>
+
+            {/* --- QUANTUM MECHANICS MODEL: Probability Electron Clouds --- */}
+            {/* 1s spherical orbital cloud density */}
+            <mesh>
+              <sphereGeometry args={[2.5, 32, 32]} />
+              <meshBasicMaterial color={element.color} transparent opacity={0.06} blending={THREE.AdditiveBlending} />
+            </mesh>
+
+            {/* 2s spherical orbital cloud density */}
+            {element.atomicNumber > 2 && (
+              <mesh>
+                <sphereGeometry args={[4.2, 32, 32]} />
+                <meshBasicMaterial color={element.color} transparent opacity={0.03} blending={THREE.AdditiveBlending} />
+              </mesh>
+            )}
+
+            {/* 2p dumbbell orbital clouds */}
+            {element.atomicNumber >= 5 && (
+              <group>
+                {/* 2px */}
+                <group rotation={[0, 0, 0]}>
+                  <mesh position={[-4.0, 0, 0]}>
+                    <sphereGeometry args={[1.0, 16, 16]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.04} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                  <mesh position={[4.0, 0, 0]}>
+                    <sphereGeometry args={[1.0, 16, 16]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.04} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                </group>
+                {/* 2py */}
+                <group rotation={[0, 0, Math.PI / 2]}>
+                  <mesh position={[-4.0, 0, 0]}>
+                    <sphereGeometry args={[1.0, 16, 16]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.04} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                  <mesh position={[4.0, 0, 0]}>
+                    <sphereGeometry args={[1.0, 16, 16]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.04} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                </group>
+                {/* 2pz */}
+                <group rotation={[0, Math.PI / 2, 0]}>
+                  <mesh position={[-4.0, 0, 0]}>
+                    <sphereGeometry args={[1.0, 16, 16]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.04} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                  <mesh position={[4.0, 0, 0]}>
+                    <sphereGeometry args={[1.0, 16, 16]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.04} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                </group>
+              </group>
+            )}
 
             {/* Electron Shells */}
             <group>
@@ -378,6 +444,120 @@ const MetallicElectron = ({ p, pos1, pos2 }: { p: any, pos1: [number, number, nu
 export const AtomicScene = ({ embedded = false }: { embedded?: boolean }) => {
     const { selectedElement, selectedElement2, bondingMode, setTableOpen } = useAtomicStore();
     const [distanceScale, setDistanceScale] = useState<number>(1.0);
+
+    const [isDrifting, setIsDrifting] = useState<boolean>(false);
+    const [cumulativeReleasedEnergy, setCumulativeReleasedEnergy] = useState<number>(0);
+    const velocityRef = useRef<number>(0);
+    const positionRef = useRef<number>(1.0);
+
+    // Keep positionRef in sync when user manually drags the slider (not auto-drifting)
+    useEffect(() => {
+        if (!isDrifting) {
+            positionRef.current = distanceScale;
+            velocityRef.current = 0;
+        }
+    }, [distanceScale, isDrifting]);
+
+    // Track energy release as they drift
+    useEffect(() => {
+        if (!selectedElement || !selectedElement2) {
+            setCumulativeReleasedEnergy(0);
+            return;
+        }
+        // Potential energy release of selected atoms relative to outer dissociation point (distanceScale = 1.8)
+        const baseline = calculateBond(selectedElement, selectedElement2, 1.8);
+        const currentB = calculateBond(selectedElement, selectedElement2, distanceScale);
+        
+        // Cumulative release = baseline energy - current energy
+        const released = baseline.potentialEnergy - currentB.potentialEnergy;
+        setCumulativeReleasedEnergy(released > 0 ? released : 0);
+    }, [selectedElement, selectedElement2, distanceScale]);
+
+    // Euler-Cromer Physics Integration Loop for Realistic Morse Potential Drifting & Vibration
+    useEffect(() => {
+        if (!isDrifting || !selectedElement || !selectedElement2) return;
+
+        let animFrameId: number;
+        let lastTime = performance.now();
+
+        const step = (now: number) => {
+            const dt = Math.min((now - lastTime) / 1000, 0.05); // Clamping dt to avoid leap issues on slow machines
+            lastTime = now;
+
+            const currentBond = calculateBond(selectedElement, selectedElement2, positionRef.current);
+            const De = currentBond.equilibriumEnergy;
+            const a = 4.2;
+            const x = positionRef.current;
+            
+            // Calculate restorative chemical force: F = - dV/dx = -2 * De * a * exp(-a*(x-1)) * (1 - exp(-a*(x-1)))
+            const DeNormalized = De / 1500; // Scaling for smooth visualization
+            const expTerm = Math.exp(-a * (x - 1.0));
+            const force = -2 * DeNormalized * a * expTerm * (1.0 - expTerm);
+
+            // Viscous damping friction to dissipate excess kinetic energy as heat, relaxing the bond down
+            const friction = 2.8; 
+            const frictionForce = -friction * velocityRef.current;
+
+            const acceleration = force + frictionForce;
+
+            // Integration Step
+            velocityRef.current += acceleration * dt * 45; 
+            positionRef.current += velocityRef.current * dt;
+
+            // Safeguards / limits
+            if (positionRef.current < 0.45) {
+                positionRef.current = 0.45;
+                velocityRef.current = -velocityRef.current * 0.1; // soft bounce
+            }
+            if (positionRef.current > 1.8) {
+                positionRef.current = 1.8;
+                velocityRef.current = -velocityRef.current * 0.1;
+            }
+
+            setDistanceScale(parseFloat(positionRef.current.toFixed(4)));
+
+            animFrameId = requestAnimationFrame(step);
+        };
+
+        animFrameId = requestAnimationFrame(step);
+        return () => cancelAnimationFrame(animFrameId);
+    }, [isDrifting, selectedElement, selectedElement2]);
+
+    const startDrift = () => {
+        setDistanceScale(1.8);
+        positionRef.current = 1.8;
+        velocityRef.current = 0;
+        setIsDrifting(true);
+    };
+
+    const pauseDrift = () => {
+        setIsDrifting(false);
+    };
+
+    const resetDrift = () => {
+        setIsDrifting(false);
+        setDistanceScale(1.0);
+    };
+
+    // Compute the Morse graph plotting coordinate cache over the simulation bounds
+    const chartData = useMemo(() => {
+        if (!selectedElement || !selectedElement2) return [];
+        
+        const sh1 = 3 + (selectedElement.electrons.length - 1) * 1.5;
+        const sh2 = 3 + (selectedElement2.electrons.length - 1) * 1.5;
+        const sDist = sh1 + sh2;
+
+        const points = [];
+        for (let r = 0.45; r <= 1.815; r += 0.035) {
+            const b = calculateBond(selectedElement, selectedElement2, r);
+            points.push({
+                distanceScale: parseFloat(r.toFixed(3)),
+                distance: parseFloat((r * sDist).toFixed(3)),
+                potentialEnergy: parseFloat(b.potentialEnergy.toFixed(2))
+            });
+        }
+        return points;
+    }, [selectedElement, selectedElement2]);
 
     if (!selectedElement) {
         return (
@@ -595,6 +775,36 @@ export const AtomicScene = ({ embedded = false }: { embedded?: boolean }) => {
                                         </div>
                                     </div>
 
+                                    {/* Drift Controller Buttons */}
+                                    <div className="flex gap-2">
+                                        {isDrifting ? (
+                                            <button 
+                                                onClick={pauseDrift}
+                                                className="flex-1 bg-amber-500/10 border border-amber-500/25 hover:bg-amber-500/20 text-amber-300 rounded py-1.5 px-2 font-mono text-[9px] uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-all"
+                                            >
+                                                <Pause className="w-3 h-3" />
+                                                Pause Drift
+                                            </button>
+                                        ) : (
+                                            <button 
+                                                onClick={startDrift}
+                                                className="flex-1 bg-fuchsia-500/25 border border-fuchsia-500/40 hover:bg-fuchsia-500/35 text-fuchsia-300 rounded py-1.5 px-2 font-mono text-[9px] uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-all"
+                                                title="Trigger atoms starting at outer orbit and drifting inward under physical attraction"
+                                            >
+                                                <Play className="w-3 h-3 text-fuchsia-400" />
+                                                Simulate Drift
+                                            </button>
+                                        )}
+                                        <button 
+                                            onClick={resetDrift}
+                                            className="bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 hover:text-white rounded py-1.5 px-2.5 font-mono text-[9px] uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-all"
+                                            title="Reset back to stable equilibrium bonding distance"
+                                        >
+                                            <RotateCcw className="w-3 h-3 text-white/50" />
+                                            Equil (1.0)
+                                        </button>
+                                    </div>
+
                                     {/* Dynamic comparison of values */}
                                     <div className="border-t border-white/5 pt-2 mt-1 space-y-1">
                                         <div className="flex justify-between text-[10px] font-mono">
@@ -699,6 +909,113 @@ export const AtomicScene = ({ embedded = false }: { embedded?: boolean }) => {
                             </div>
                         )}
                     </div>
+
+                    {/* Bottom Center Potential Energy Plotter Overlay */}
+                    {showBonding && selectedElement2 && bond && (
+                        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-auto w-[560px] max-w-full bg-[#040406]/85 backdrop-blur-md rounded border border-white/10 p-4 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                                <div className="flex items-center gap-2">
+                                    <Activity className="w-4 h-4 text-cyan-400 animate-pulse" />
+                                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-cyan-100">
+                                        Potential Energy Well (Morse Plotter)
+                                    </span>
+                                </div>
+                                <span className={`text-[8.5px] font-mono font-bold uppercase px-2 py-0.5 rounded ${
+                                    isDrifting 
+                                        ? 'bg-amber-500/10 border border-amber-500/25 text-amber-300' 
+                                        : isBroken 
+                                            ? 'bg-red-500/10 border border-red-500/25 text-red-300 animate-pulse'
+                                            : 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-300'
+                                }`}>
+                                    {isDrifting 
+                                        ? 'DRIFT ACTIVE (RELEASING HEAT)' 
+                                        : isBroken 
+                                            ? 'DISSOCIATED LIMIT reached' 
+                                            : 'EQUILIBRIUM GROUND STATE'
+                                    }
+                                </span>
+                            </div>
+
+                            {/* Secondary visual metrics deck */}
+                            <div className="grid grid-cols-3 gap-2 font-mono text-[9px] text-[#bcbecb] mb-1">
+                                <div className="bg-[#0c0c10]/50 border border-white/5 rounded p-1.5 text-center flex flex-col justify-center">
+                                    <span className="text-white/30 text-[7.5px] uppercase font-semibold">Inter-nuclear r</span>
+                                    <span className="text-white font-bold text-xs">{currentDist.toFixed(2)} Å</span>
+                                </div>
+                                <div className="bg-[#0c0c10]/50 border border-white/5 rounded p-1.5 text-center flex flex-col justify-center">
+                                    <span className="text-white/30 text-[7.5px] uppercase font-semibold">Bond Potential Ep</span>
+                                    <span className={`font-bold text-xs ${bond.potentialEnergy > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                        {bond.potentialEnergy.toFixed(1)} kJ/mol
+                                    </span>
+                                </div>
+                                <div className="bg-[#0c0c10]/50 border border-white/5 rounded p-1.5 text-center flex flex-col justify-center">
+                                    <span className="text-white/30 text-[7.5px] uppercase font-semibold text-ellipsis truncate">Energy Release</span>
+                                    <span className="text-cyan-400 font-bold text-xs">{cumulativeReleasedEnergy.toFixed(1)} kJ/mol</span>
+                                </div>
+                            </div>
+
+                            <div className="w-full h-32 relative">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={chartData} margin={{ top: 5, right: 10, left: -25, bottom: -5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" strokeOpacity={0.04} />
+                                        <XAxis 
+                                            dataKey="distance" 
+                                            stroke="#ffffff30" 
+                                            fontSize={8} 
+                                            tickLine={false} 
+                                            label={{ value: 'Distance (Å)', position: 'insideBottomRight', offset: -5, fontSize: 8, fill: '#ffffff50', fontFamily: 'monospace' }}
+                                            fontFamily="monospace"
+                                        />
+                                        <YAxis 
+                                            stroke="#ffffff30" 
+                                            fontSize={8} 
+                                            tickLine={false}
+                                            allowDataOverflow={true}
+                                            domain={[
+                                                Math.round(-bond.equilibriumEnergy * 1.25),
+                                                Math.round(bond.equilibriumEnergy * 0.6 + 50)
+                                            ]}
+                                            label={{ value: 'Energy (kJ/mol)', angle: -90, position: 'insideLeft', offset: 10, fontSize: 8, fill: '#ffffff50', fontFamily: 'monospace' }}
+                                            fontFamily="monospace"
+                                        />
+                                        <ChartTooltip 
+                                            content={({ active, payload }) => {
+                                                if (active && payload && payload.length) {
+                                                    const data = payload[0].payload;
+                                                    return (
+                                                        <div className="bg-[#0c0c12]/95 border border-white/10 p-2 rounded text-[9px] font-mono text-white/90">
+                                                            <div className="text-[10px] text-cyan-400 font-bold mb-0.5">r = {data.distance.toFixed(2)} Å</div>
+                                                            <div>Potential: {parseFloat(data.potentialEnergy).toFixed(1)} kJ/mol</div>
+                                                            <div className="text-[8.5px] text-white/40">Scale: {data.distanceScale.toFixed(2)}x</div>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            }}
+                                        />
+                                        <ReferenceLine y={0} stroke="#ffffff" strokeOpacity={0.15} strokeDasharray="5 5" />
+                                        <ReferenceLine x={standardDist} stroke="#a855f7" strokeOpacity={0.25} strokeDasharray="3 3" />
+                                        <RechartsLine 
+                                            type="monotone" 
+                                            dataKey="potentialEnergy" 
+                                            stroke={getBondColor()} 
+                                            strokeWidth={2} 
+                                            dot={false}
+                                            activeDot={false}
+                                        />
+                                        <ReferenceDot 
+                                            x={currentDist} 
+                                            y={bond.potentialEnergy} 
+                                            r={5} 
+                                            fill="#eab308" 
+                                            stroke="#ffffff" 
+                                            strokeWidth={1.5}
+                                        />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
         </div>

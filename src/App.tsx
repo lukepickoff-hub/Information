@@ -1,5 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { Loader2, Send, RefreshCw, Clock, History, Info, FlaskConical, Atom, ChevronLeft, ChevronRight, Compass } from 'lucide-react';
 import { SpacetimeCanvas } from './components/SpacetimeCanvas';
 import { useModeStore } from './store/useModeStore';
@@ -72,6 +77,22 @@ const getContinuousTimeLabel = (percent: number, activeId: string) => {
       return `~${currentVal.toFixed(2)} Billion Years Ago`;
     }
   }
+};
+
+const preprocessScientificMath = (text: string): string => {
+  if (!text) return '';
+
+  let res = text;
+
+  // 1. Convert any double-escaped or standard block LaTeX \[ ... \] to $$ ... $$
+  res = res.replace(/\\\\\[([\s\S]*?)\\\\\]/g, '$$$$$1$$$$');
+  res = res.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
+
+  // 2. Convert standard or double-escaped inline LaTeX \( ... \) to $ ... $
+  res = res.replace(/\\\\\(([\s\S]*?)\\\\\)/g, '$$1$');
+  res = res.replace(/\\\(([\s\S]*?)\\\)/g, '$$1$');
+
+  return res;
 };
 
 export default function App() {
@@ -567,6 +588,15 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
     return linkifyScienceText(explanation);
   }, [explanation, linkifyScienceText]);
 
+  const finalActiveStageMarkdown = useMemo(() => {
+    return preprocessScientificMath(activeStageMarkdown);
+  }, [activeStageMarkdown]);
+
+  const finalExplanationMarkdown = useMemo(() => {
+    if (!explanationMarkdown) return '';
+    return preprocessScientificMath(explanationMarkdown);
+  }, [explanationMarkdown]);
+
   // Handle intercepting markdown links
   const MarkdownComponents = useMemo(() => ({
     a: ({ href, children }: any) => {
@@ -738,7 +768,7 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
 
           {/* Main scrollable textarea / information reader containing markdown layout of the active body */}
           <div id="data-readout-panel" className="flex-1 bg-[#030305] p-6 overflow-y-auto scrollbar-thin">
-            <div className="max-w-5xl mx-auto h-full flex flex-col gap-6">
+            <div className="max-w-5xl mx-auto min-h-full flex flex-col gap-6">
               {isLoading ? (
                 <div className="h-full w-full flex-1 flex flex-col items-center justify-center text-center py-20">
                   <Loader2 className="w-7 h-7 text-cyan-400 animate-spin mb-2" />
@@ -770,12 +800,12 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
                         </button>
                       </div>
                       <div className="markdown-body text-xs font-mono text-white/90 leading-relaxed space-y-2">
-                        <Markdown components={MarkdownComponents}>{explanationMarkdown || ''}</Markdown>
+                        <Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeKatex, { throwOnError: false, strict: false }]]} components={MarkdownComponents}>{finalExplanationMarkdown}</Markdown>
                       </div>
                     </div>
                   ) : (
                     <div className="animate-in fade-in duration-150 markdown-body text-xs font-mono text-white/90 leading-relaxed pr-2">
-                      <Markdown components={MarkdownComponents}>{activeStageMarkdown}</Markdown>
+                      <Markdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeKatex, { throwOnError: false, strict: false }]]} components={MarkdownComponents}>{finalActiveStageMarkdown}</Markdown>
                     </div>
                   )}
 

@@ -79,15 +79,128 @@ body {
 }
 
 .markdown-body table {
-  @apply w-full text-left border-collapse mb-8 text-[11px] font-mono border border-white/5;
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin-bottom: 2rem;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .markdown-body th {
-  @apply border-b border-white/10 pb-2 pt-3 px-3 text-white/30 uppercase tracking-widest font-sans font-bold bg-white/[0.02];
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.75rem 0.75rem 0.5rem;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: var(--font-sans);
+  font-weight: bold;
+  background-color: rgba(255, 255, 255, 0.02);
+  white-space: nowrap;
 }
 
 .markdown-body td {
-  @apply border-b border-white/5 py-2 px-3 text-white/50;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.5rem 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
+
+/* Mathematical and Formula styling */
+.math-block {
+  display: flex;
+  justify-content: center;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.math-equation {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #22d3ee; /* cyan-400 */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  letter-spacing: 0.03em;
+}
+
+.math-inline {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #fbbf24; /* amber-400 */
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  margin: 0 0.25rem;
+}
+
+.math-frac {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: middle;
+  padding: 0 4px;
+}
+
+.math-num {
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 2px;
+  font-size: 0.9em;
+}
+
+.math-den {
+  padding-top: 2px;
+  font-size: 0.9em;
+}
+
+.math-text {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-weight: normal;
+}
+
+/* Beautiful KaTeX Specific Overrides */
+.katex-display {
+  display: block;
+  margin: 1.5rem 0;
+  padding: 0.75rem 1rem;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid rgba(34, 211, 238, 0.4); /* Cyan left accent bar */
+  border-radius: 4px;
+  color: #22d3ee; /* Cyan math display */
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: thin;
+}
+
+.katex-display::-webkit-scrollbar {
+  height: 4px;
+}
+
+.katex-display::-webkit-scrollbar-thumb {
+  background-color: rgba(34, 211, 238, 0.2);
+  border-radius: 99px;
+}
+
+.katex-display .base {
+  padding: 4px 0;
+}
+
+/* Inline KaTeX equations */
+.markdown-body .katex {
+  font-size: 1em;
+  color: #fbbf24; /* Elegant Amber for inline equations */
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.1);
+  padding: 0 2px;
 }
 
 .markdown-body hr {

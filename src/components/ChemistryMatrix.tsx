@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { PARTICLE_TABLE_DATA, QUANTITY_OVER_TIME, MOLECULE_COMPOSITIONS } from '../data/chemistryData';
+import { PARTICLE_TABLE_DATA, QUANTITY_OVER_TIME, MOLECULE_COMPOSITIONS, OBJECT_ATOMIC_ABUNDANCE, AtomRatio } from '../data/chemistryData';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import { FlaskConical, History, Atom, Binary, Compass, Zap } from 'lucide-react';
 import { useDashboardStore, DashboardId } from '../store/useDashboardStore';
@@ -54,6 +54,23 @@ const PARTICLE_SCALE_MAP: Record<string, DashboardId> = {
   'ATP': 'mitochondria'
 };
 
+const getElementColor = (symbol: string) => {
+  switch (symbol) {
+    case 'H': return 'from-sky-500 to-indigo-500 bg-sky-500/20 text-sky-300';
+    case 'He': return 'from-teal-400 to-cyan-500 bg-teal-500/20 text-teal-300';
+    case 'O': return 'from-red-500 to-rose-600 bg-red-500/20 text-red-300';
+    case 'C': return 'from-slate-400 to-slate-500 bg-slate-500/20 text-slate-300';
+    case 'N': return 'from-blue-500 to-indigo-600 bg-blue-500/20 text-blue-300';
+    case 'P': return 'from-orange-500 to-amber-600 bg-orange-500/20 text-amber-300';
+    case 'Fe': return 'from-amber-700 to-red-700 bg-amber-700/20 text-amber-500';
+    case 'Si': return 'from-yellow-500 to-amber-500 bg-yellow-500/20 text-yellow-300';
+    case 'Ca': return 'from-emerald-400 to-green-500 bg-emerald-500/20 text-emerald-300';
+    case 'Mg': return 'from-lime-400 to-green-400 bg-lime-500/20 text-lime-300';
+    case 'S': return 'from-yellow-400 to-yellow-600 bg-yellow-500/20 text-yellow-400';
+    default: return 'from-purple-500 to-fuchsia-500 bg-purple-500/20 text-purple-300';
+  }
+};
+
 export function ChemistryMatrix({ activeId }: ChemistryMatrixProps) {
   const { setDashboardId } = useDashboardStore();
 
@@ -84,6 +101,12 @@ export function ChemistryMatrix({ activeId }: ChemistryMatrixProps) {
   const composition = useMemo(() => {
     return MOLECULE_COMPOSITIONS[selectedParticle.symbol] || [];
   }, [selectedParticle]);
+
+  const atomicAbundance = useMemo(() => {
+    const list = OBJECT_ATOMIC_ABUNDANCE[activeId] || [];
+    // Sort from highest atomic percentage to lowest
+    return [...list].sort((a, b) => b.percentage - a.percentage);
+  }, [activeId]);
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
@@ -140,7 +163,158 @@ export function ChemistryMatrix({ activeId }: ChemistryMatrixProps) {
         </div>
       </div>
 
-      {/* 2. Visual Bond Connectivity Schema / Bohr Atom Model (THE TOPOLOGY DISCOVERY CORE) */}
+      {/* 2. OBJECT-LEVEL ELEMENTAL ATOMIC ABUNDANCE RATIO TABLE (Sorted descending) */}
+      <div className="bg-[#09090e] border border-white/5 rounded p-4 font-sans animate-in slide-in-from-bottom-2 duration-300">
+        <div className="flex items-center gap-2 mb-2">
+          <Binary className="w-4 h-4 text-purple-400" />
+          <h3 className="text-xs font-bold uppercase tracking-widest text-[#f4f4f5] font-mono">
+            Elemental Atomic Abundance Specs Profile
+          </h3>
+        </div>
+        <p className="text-[10px] text-white/40 mb-3 leading-relaxed">
+          The exact distribution percentage of atoms that construct this physical system, arranged from <strong className="text-purple-400">highest ratio (top)</strong> to <strong className="text-purple-400">lowest ratio (bottom)</strong>.
+        </p>
+
+        {/* Stacked Proportional Distribution Visual Bar */}
+        {atomicAbundance.length > 0 && (
+          <div className="space-y-1.5 mb-4">
+            <span className="text-[8px] font-mono text-white/30 uppercase tracking-widest font-bold">
+              Visual Mass-to-Atom Fractional Spectrum
+            </span>
+            <div className="w-full h-3 rounded bg-black/60 overflow-hidden flex border border-white/5 select-none">
+              {atomicAbundance.map((item, index) => {
+                const colors = getElementColor(item.symbol).split(' ');
+                const colorClass = `${colors[0]} ${colors[1]}`;
+                return (
+                  <div
+                    key={`bar-${item.symbol}-${index}`}
+                    style={{ width: `${Math.max(item.percentage, 2)}%` }}
+                    className={`h-full bg-gradient-to-r ${colorClass} transition-all duration-500 relative`}
+                    title={`${item.element} (${item.symbol}): ${item.percentage}% (By Atom Count)`}
+                  />
+                );
+              })}
+            </div>
+            {/* Quick mini-legend labels */}
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[8px] font-mono">
+              {atomicAbundance.map((item, index) => {
+                const colors = getElementColor(item.symbol).split(' ');
+                const colorText = colors[3];
+                return (
+                  <div key={`legend-${item.symbol}-${index}`} className="flex items-center gap-1">
+                    <span className={`w-1.5 h-1.5 rounded-full bg-gradient-to-r ${colors[0]}`} />
+                    <span className={`${colorText} font-bold`}>{item.symbol}</span>
+                    <span className="text-white/30">({item.percentage}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* The Abundance Matrix Table */}
+        <div className="overflow-x-auto border border-white/5 rounded bg-black/40">
+          <table className="w-full text-left text-xs whitespace-normal font-sans">
+            <thead>
+              <tr className="bg-[#050508] text-white/40 text-[9px] uppercase tracking-wider font-mono border-b border-white/5">
+                <th className="px-3 py-2 text-center w-8">Rank</th>
+                <th className="px-3 py-2 w-28">Atomic Node / Element</th>
+                <th className="px-3 py-2 text-right w-24">Atom Count Ratio</th>
+                <th className="px-3 py-2 text-right w-24">Mass Percent</th>
+                <th className="px-3 py-2 min-w-[200px]">Structural / Metabolic Role</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {atomicAbundance.map((item, index) => {
+                const colors = getElementColor(item.symbol).split(' ');
+                const colorBadge = colors[2];
+                const colorText = colors[3];
+                const borderHover = relevantSymbols.includes(item.symbol) || PARTICLE_SCALE_MAP[item.symbol];
+                const isSelectedInHeader = item.symbol === currentSymbol;
+
+                return (
+                  <tr
+                    key={`row-${item.symbol}-${index}`}
+                    onClick={() => {
+                      if (relevantSymbols.includes(item.symbol)) {
+                        setActiveSymbol(item.symbol);
+                      } else if (PARTICLE_SCALE_MAP[item.symbol]) {
+                        const targetId = PARTICLE_SCALE_MAP[item.symbol];
+                        if (targetId) setDashboardId(targetId);
+                      }
+                    }}
+                    className={`transition-all duration-200 ${
+                      isSelectedInHeader 
+                        ? 'bg-purple-950/15' 
+                        : borderHover 
+                          ? 'hover:bg-white/5 cursor-pointer' 
+                          : 'hover:bg-white/[0.02]'
+                    }`}
+                  >
+                    {/* Rank cell */}
+                    <td className="px-3 py-2.5 text-center font-mono font-bold text-white/30 text-[10px]">
+                      #{index + 1}
+                    </td>
+
+                    {/* Element badge & name */}
+                    <td className="px-3 py-2.5 font-mono">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-1.5 py-0.5 text-[9px] leading-none font-bold rounded border border-white/10 shadow-sm ${colorBadge} ${colorText}`}>
+                          {item.symbol}
+                        </span>
+                        <span className="text-white/80 font-bold font-sans text-[10px] truncate block w-20" title={item.element}>
+                          {item.element}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Atom Count percentage with graphical bar */}
+                    <td className="px-3 py-2.5 text-right font-mono text-[10.5px]">
+                      <div className="flex flex-col items-end gap-1 select-none">
+                        <span className="font-bold text-emerald-400">{item.percentage.toFixed(index === 0 && item.percentage === 100 ? 1 : 2)}%</span>
+                        <div className="w-16 h-1 bg-white/5 rounded-full overflow-hidden border border-white/10">
+                          <div
+                            className={`h-full bg-gradient-to-r ${colors[0]} rounded-full`}
+                            style={{ width: `${item.percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Mass Percent */}
+                    <td className="px-3 py-2.5 text-right font-mono text-[10px] text-purple-300 font-semibold">
+                      {item.massPercent.toFixed(index === 0 && item.massPercent === 100 ? 1 : 2)}%
+                    </td>
+
+                    {/* Role & Dynamic focus link */}
+                    <td className="px-3 py-2.5 text-white/60 text-[10px] leading-relaxed">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{item.role}</span>
+                        {relevantSymbols.includes(item.symbol) && (
+                          <span className={`text-[8px] font-mono shrink-0 px-1 py-0.5 rounded uppercase border transition-all ${
+                            isSelectedInHeader 
+                              ? 'bg-purple-950 border-purple-400 text-purple-200 font-bold' 
+                              : 'bg-black/60 border-white/10 text-white/30 hover:text-white/70 font-medium'
+                          }`}>
+                            {isSelectedInHeader ? 'Active focus' : 'Select'}
+                          </span>
+                        )}
+                        {!relevantSymbols.includes(item.symbol) && PARTICLE_SCALE_MAP[item.symbol] && (
+                          <span className="text-[8px] font-mono shrink-0 px-1 py-0.5 rounded bg-blue-950/40 border border-blue-500/20 text-blue-300 uppercase font-medium">
+                            Scale Link
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 3. Visual Bond Connectivity Schema / Bohr Atom Model (THE TOPOLOGY DISCOVERY CORE) */}
       <div className="bg-[#09090e] border border-white/5 rounded p-4">
         <div className="flex items-center gap-2 mb-3">
           <Atom className="w-4 h-4 text-emerald-400 animate-spin-slow" />
