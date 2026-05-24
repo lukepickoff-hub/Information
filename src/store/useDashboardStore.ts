@@ -25,7 +25,7 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   simulationMode: false,
   simulationSelected: [],
   simulationActive: false,
-  setDashboardId: (id) => set({ activeDashboardId: id, activeTimelineStep: 3 }), // default to present on object swap
+  setDashboardId: (id) => set({ activeDashboardId: id, activeTimelineStep: 1 }), // default to birth on object swap
   setTimelineStep: (step) => set({ activeTimelineStep: step }),
   setInteractMode: (mode) => set({ interactMode: mode }),
   setSimulationMode: (enabled) => set((state) => {
