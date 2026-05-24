@@ -231,6 +231,15 @@ export const OBJECT_ATOMIC_ABUNDANCE: Record<string, AtomRatio[]> = {
     { element: "Phosphorus", symbol: "P", percentage: 3.0, massPercent: 12.0, role: "Intertwined with Calcium to construct rigid crystalline mineral lattices" },
     { element: "Other Trace Elements", symbol: "Traces", percentage: 1.0, massPercent: 5.6, role: "Nitrogen, bone Magnesium, Sodium, and structural Carbonates" }
   ],
+  human: [
+    { element: "Hydrogen", symbol: "H", percentage: 62.2, massPercent: 10.0, role: "Dominates molecular water counts structuring the systemic human homeostatic fluid volume" },
+    { element: "Oxygen", symbol: "O", percentage: 24.3, massPercent: 65.0, role: "Drives cellular aerobic cycle mitochondria respiration and metabolic oxygen exchange" },
+    { element: "Carbon", symbol: "C", percentage: 11.8, massPercent: 18.5, role: "Forms primary covalent links in macro biological enzymes, lipids, and DNA helices" },
+    { element: "Nitrogen", symbol: "N", percentage: 1.2, massPercent: 3.2, role: "Universal constituent of active amino acid chains and nucleic genetic bases" },
+    { element: "Calcium", symbol: "Ca", percentage: 0.23, massPercent: 1.5, role: "Directly calcifies rigid bone structures and manages neurological neuromuscular firing signals" },
+    { element: "Phosphorus", symbol: "P", percentage: 0.17, massPercent: 1.0, role: "Crucial reactant powering ATP energy transfers and cell membrane phospholipid layers" },
+    { element: "Other Trace Elements", symbol: "Traces", percentage: 0.1, massPercent: 0.8, role: "Systemic Potassium, Sodium ions, Sulfur nodes, and catalytic metallic traces like iron" }
+  ],
   cell: [
     { element: "Hydrogen", symbol: "H", percentage: 62.0, massPercent: 10.0, role: "Unifying component of water ($H_2O$) and organic sugar molecules" },
     { element: "Oxygen", symbol: "O", percentage: 24.0, massPercent: 65.0, role: "Critical for aerobic cellular respiration, metabolic water, and energy" },

@@ -38,6 +38,7 @@ export const OBJECT_COORDS: Record<DashboardId, [number, number, number]> = {
   uranus: [680, 0, 0],
   neptune: [790, 0, 0],
   skeleton: [262, 0, 0],
+  human: [262, -0.2, 1.6],
   cell: [262, 1.2, 0],
   mitochondria: [262, 1.2, 0.8],
   carbon: [262, 1.2, -0.8],
@@ -77,6 +78,7 @@ export const OBJECT_OFFSETS: Record<DashboardId, [number, number, number]> = {
   cell: [0, 0.008, 0.016],
   mitochondria: [0, 0.004, 0.008],
   skeleton: [0, 0.04, 0.08],
+  human: [0, 0.04, 0.08],
   hydrogen: [0, 0.0004, 0.0008],
   helium: [0, 0.0004, 0.0008],
   lithium: [0, 0.0004, 0.0008],
@@ -102,10 +104,11 @@ export const OBJECT_OFFSETS: Record<DashboardId, [number, number, number]> = {
 const DynamicPosition = ({ id, children }: { id: DashboardId, children: React.ReactNode }) => {
   const ref = useRef<THREE.Group>(null);
   const interactMode = useDashboardStore(s => s.interactMode);
-  const { simulationActive } = useDashboardStore();
+  const { simulationActive, simulationMode, toggleSimulationSelected, setDashboardId } = useDashboardStore();
   
   // Custom drag state
   const isDragging = useRef(false);
+  const hasMoved = useRef(false);
   const dragPlane = useRef(new THREE.Plane(new THREE.Vector3(0,0,1), 0));
   const offset = useRef(new THREE.Vector3());
   const scaleRef = useRef(1);
@@ -131,6 +134,7 @@ const DynamicPosition = ({ id, children }: { id: DashboardId, children: React.Re
     if (!interactMode || simulationActive) return;
     e.stopPropagation();
     isDragging.current = true;
+    hasMoved.current = false;
     e.target.setPointerCapture(e.pointerId);
 
     // Create a plane facing the camera
@@ -147,6 +151,7 @@ const DynamicPosition = ({ id, children }: { id: DashboardId, children: React.Re
   const onPointerMove = (e: any) => {
     if (!isDragging.current || !interactMode || simulationActive) return;
     e.stopPropagation();
+    hasMoved.current = true;
 
     const intersection = new THREE.Vector3();
     e.ray.intersectPlane(dragPlane.current, intersection);
@@ -178,6 +183,21 @@ const DynamicPosition = ({ id, children }: { id: DashboardId, children: React.Re
     }
   };
 
+  const onClick = (e: any) => {
+    e.stopPropagation();
+    if (hasMoved.current) {
+      hasMoved.current = false;
+      return;
+    }
+
+    if (simulationMode) {
+      toggleSimulationSelected(id);
+    } else {
+      setDashboardId(id);
+      window.dispatchEvent(new CustomEvent('spacetime-reset-explanation'));
+    }
+  };
+
   return (
     <group 
       ref={ref} 
@@ -185,6 +205,7 @@ const DynamicPosition = ({ id, children }: { id: DashboardId, children: React.Re
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerOut={onPointerUp}
+      onClick={onClick}
     >
       {children}
     </group>
@@ -369,37 +390,39 @@ const SpacetimeSun = () => {
   const emissiveColor = isSunActive && activeTimelineStep === 5 ? '#a5f3fc' : isSunActive && activeTimelineStep === 4 ? '#dc2626' : '#f59e0b';
 
   return (
-    <group position={OBJECT_COORDS.sun} scale={[baseScale, baseScale, baseScale]}>
-      {/* Prime Core */}
-      <mesh ref={innerRef}>
-        <sphereGeometry args={[109, 64, 64]} />
-        <meshStandardMaterial 
-          color={sunColor} 
-          map={texture}
-          roughness={0.1}
-          emissive={new THREE.Color(emissiveColor)}
-          emissiveIntensity={1.8}
-        />
-      </mesh>
-      {/* Outer Corona Shield */}
-      <mesh ref={outerRef}>
-        <sphereGeometry args={[112, 32, 32]} />
-        <meshBasicMaterial 
-          color={emissiveColor} 
-          wireframe 
-          transparent 
-          opacity={activeTimelineStep === 1 ? 0.4 : 0.2} 
-          blending={THREE.AdditiveBlending} 
-        />
-      </mesh>
-      {/* Extreme Thermal Nova Ring */}
-      {activeTimelineStep === 5 && (
-        <mesh>
-          <sphereGeometry args={[180, 32, 32]} />
-          <meshBasicMaterial color="#06b6d4" transparent opacity={0.25} wireframe />
+    <DynamicPosition id="sun">
+      <group scale={[baseScale, baseScale, baseScale]}>
+        {/* Prime Core */}
+        <mesh ref={innerRef}>
+          <sphereGeometry args={[109, 64, 64]} />
+          <meshStandardMaterial 
+            color={sunColor} 
+            map={texture}
+            roughness={0.1}
+            emissive={new THREE.Color(emissiveColor)}
+            emissiveIntensity={1.8}
+          />
         </mesh>
-      )}
-    </group>
+        {/* Outer Corona Shield */}
+        <mesh ref={outerRef}>
+          <sphereGeometry args={[112, 32, 32]} />
+          <meshBasicMaterial 
+            color={emissiveColor} 
+            wireframe 
+            transparent 
+            opacity={activeTimelineStep === 1 ? 0.4 : 0.2} 
+            blending={THREE.AdditiveBlending} 
+          />
+        </mesh>
+        {/* Extreme Thermal Nova Ring */}
+        {activeTimelineStep === 5 && (
+          <mesh>
+            <sphereGeometry args={[180, 32, 32]} />
+            <meshBasicMaterial color="#06b6d4" transparent opacity={0.25} wireframe />
+          </mesh>
+        )}
+      </group>
+    </DynamicPosition>
   );
 };
 
@@ -1018,6 +1041,137 @@ const SpacetimeSkeleton = () => {
   );
 };
 
+const SpacetimeHuman = () => {
+  const { activeTimelineStep } = useDashboardStore();
+  const isDeath = activeTimelineStep === 5;
+  const heartRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime();
+    if (heartRef.current) {
+      if (isDeath) {
+        heartRef.current.scale.setScalar(0.01);
+      } else {
+        // Double pulse cardiac physiological rhythm: beat-beat... pause... beat-beat
+        const beatVal = Math.sin(t * 5.0) * Math.sin(t * 5.0 + 1.2);
+        const pulseFactor = 1.0 + Math.max(0, beatVal) * 0.25;
+        heartRef.current.scale.setScalar(pulseFactor);
+      }
+    }
+  });
+
+  return (
+    <DynamicPosition id="human">
+      <group scale={0.01}>
+        {/* Physical outer transparent biological matrix envelope */}
+        {!isDeath && (
+          <group>
+            {/* Shroud head space */}
+            <mesh position={[0, 2.2, 0]}>
+              <sphereGeometry args={[0.26, 16, 16]} />
+              <meshBasicMaterial color="#a855f7" transparent opacity={0.15} wireframe />
+            </mesh>
+            {/* Torso organic shroud */}
+            <mesh position={[0, 1.15, 0]}>
+              <capsuleGeometry args={[0.38, 1.05, 8, 16]} />
+              <meshBasicMaterial color="#a855f7" transparent opacity={0.08} wireframe />
+            </mesh>
+            {/* Structural Limbs representation */}
+            <group>
+              {/* Left limb hand */}
+              <mesh position={[-0.5, 1.1, 0]} rotation={[0, 0, -0.15]}>
+                <capsuleGeometry args={[0.06, 0.9, 4, 8]} />
+                <meshBasicMaterial color="#3b82f6" transparent opacity={0.06} wireframe />
+              </mesh>
+              {/* Right limb hand */}
+              <mesh position={[0.5, 1.1, 0]} rotation={[0, 0, 0.15]}>
+                <capsuleGeometry args={[0.06, 0.9, 4, 8]} />
+                <meshBasicMaterial color="#3b82f6" transparent opacity={0.06} wireframe />
+              </mesh>
+              {/* Left lower extremity */}
+              <mesh position={[-0.22, 0.1, 0]}>
+                <capsuleGeometry args={[0.08, 1.1, 4, 8]} />
+                <meshBasicMaterial color="#3b82f6" transparent opacity={0.06} wireframe />
+              </mesh>
+              {/* Right lower extremity */}
+              <mesh position={[0.22, 0.1, 0]}>
+                <capsuleGeometry args={[0.08, 1.1, 4, 8]} />
+                <meshBasicMaterial color="#3b82f6" transparent opacity={0.06} wireframe />
+              </mesh>
+            </group>
+          </group>
+        )}
+
+        {/* --- Brain/Cerebral Nervous Core --- */}
+        <group position={[0, 2.22, 0.02]} scale={0.72}>
+          <mesh>
+            <sphereGeometry args={[0.2, 16, 16]} />
+            <meshStandardMaterial 
+              color={isDeath ? '#475569' : '#ec4899'} 
+              roughness={0.25}
+              metalness={0.1}
+              emissive={new THREE.Color(isDeath ? '#000000' : '#d946ef')}
+              emissiveIntensity={isDeath ? 0 : 0.8}
+            />
+          </mesh>
+          {/* Synaptic nerve halo rings */}
+          {!isDeath && (
+            <mesh rotation={[Math.PI / 4, Math.PI / 3, 0]}>
+              <torusGeometry args={[0.22, 0.012, 4, 24]} />
+              <meshBasicMaterial color="#f472b6" transparent opacity={0.5} />
+            </mesh>
+          )}
+        </group>
+
+        {/* --- Heart/Cardiovascular Pumping Core --- */}
+        <group ref={heartRef} position={[0.04, 1.48, 0.1]} scale={0.65}>
+          <mesh>
+            <sphereGeometry args={[0.11, 12, 12]} />
+            <meshStandardMaterial 
+              color={isDeath ? '#475569' : '#ff003c'} 
+              emissive={new THREE.Color(isDeath ? '#000000' : '#ef4444')} 
+              emissiveIntensity={isDeath ? 0 : 1.5}
+            />
+          </mesh>
+        </group>
+
+        {/* --- Respiratory Lungs --- */}
+        <group position={[0, 1.45, 0.03]} scale={0.92}>
+          <mesh position={[-0.11, 0, 0]} scale={[0.85, 1.2, 0.85]}>
+            <sphereGeometry args={[0.11, 12, 12]} />
+            <meshStandardMaterial color={isDeath ? '#475569' : '#2dd4bf'} opacity={0.75} transparent />
+          </mesh>
+          <mesh position={[0.11, 0, 0]} scale={[0.85, 1.2, 0.85]}>
+            <sphereGeometry args={[0.11, 12, 12]} />
+            <meshStandardMaterial color={isDeath ? '#475569' : '#2dd4bf'} opacity={0.75} transparent />
+          </mesh>
+        </group>
+
+        {/* --- Digestive Metabolic Stomach --- */}
+        <group position={[0, 0.98, 0.04]} scale={0.85}>
+          <mesh>
+            <capsuleGeometry args={[0.13, 0.3, 12, 12]} />
+            <meshStandardMaterial color={isDeath ? '#475569' : '#8b5cf6'} opacity={0.7} transparent />
+          </mesh>
+        </group>
+
+        {/* --- Interwoven Central Spinal Spinal Column --- */}
+        <group scale={0.96}>
+          {Array.from({ length: 6 }).map((_, idx) => {
+            const y = 0.55 + (idx / 5) * (1.35 - 0.55);
+            return (
+              <mesh key={idx} position={[0, y, -0.06]} scale={[0.07, 0.03, 0.04]}>
+                <boxGeometry args={[1, 1, 1]} />
+                <meshStandardMaterial color={isDeath ? '#475569' : '#e2e8f0'} roughness={0.8} />
+              </mesh>
+            );
+          })}
+        </group>
+      </group>
+    </DynamicPosition>
+  );
+};
+
 // Smooth Camera Transition Controller that interpolates camera focus
 const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
   const { camera, size } = useThree();
@@ -1159,6 +1313,7 @@ const LABEL_OFFSETS: Record<DashboardId, [number, number, number]> = {
   cell: [0, -0.05, 0],
   mitochondria: [0, -0.05, 0],
   skeleton: [0, -0.05, 0],
+  human: [0, -0.05, 0],
   hydrogen: [0, -0.05, 0],
   helium: [0, -0.05, 0],
   lithium: [0, -0.05, 0],
@@ -1193,6 +1348,7 @@ const RANGES: Record<string, [number, number]> = {
   mars: [1, 100],
   moon: [0.1, 5],
   skeleton: [0.01, 0.5],
+  human: [0.01, 0.5],
   cell: [0.001, 0.08],
   mitochondria: [0.001, 0.05],
   hydrogen: [0.00001, 0.002],
@@ -1292,7 +1448,7 @@ const SmartHtmlLabel = ({ id, isSelected, config, onSelectObject }: any) => {
   return (
     <Html
       position={LABEL_OFFSETS[id as DashboardId]}
-      distanceFactor={id === 'sun' ? 25 : id === 'earth' ? 5 : ATOM_IDS.includes(id as DashboardId) ? 0.005 : id === 'mitochondria' || id === 'cell' || id === 'skeleton' ? 0.05 : 12}
+      distanceFactor={id === 'sun' ? 25 : id === 'earth' ? 5 : ATOM_IDS.includes(id as DashboardId) ? 0.005 : id === 'mitochondria' || id === 'cell' || id === 'skeleton' || id === 'human' ? 0.05 : 12}
       className={`transition-opacity duration-300 pointer-events-auto`}
       center
     >
@@ -1717,6 +1873,7 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
     cell: { title: 'Eukaryotic Cell' },
     mitochondria: { title: 'Mitochondrion' },
     skeleton: { title: 'Skeletal System' },
+    human: { title: 'Human Body' },
     // First 20 elements dynamic labels generator
     ...Object.fromEntries(
       ATOM_IDS.map(id => [
@@ -1971,6 +2128,7 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
         <SpacetimeEukaryoticCell />
         <SpacetimeCell />
         <SpacetimeSkeleton />
+        <SpacetimeHuman />
 
         {/* Interactive Coordinate Target labels in 3D Space */}
         {(Object.keys(OBJECT_COORDS) as DashboardId[]).map((id) => {

@@ -148,6 +148,14 @@ export default function App() {
     return () => window.removeEventListener('spacetime-reaction', handleReaction);
   }, [setInteractMode]);
 
+  useEffect(() => {
+    const handleResetExplanation = () => {
+      setExplanation(null);
+    };
+    window.addEventListener('spacetime-reset-explanation', handleResetExplanation);
+    return () => window.removeEventListener('spacetime-reset-explanation', handleResetExplanation);
+  }, []);
+
   const activeData = useMemo(() => {
     return DASHBOARD_DATA[activeDashboardId] || DASHBOARD_DATA.moon;
   }, [activeDashboardId]);
@@ -292,72 +300,83 @@ export default function App() {
 
     const lowerTopic = currentTopic.toLowerCase().trim();
 
-    // Map keywords directly to selected object structures
-    if (['moon', 'the moon'].includes(lowerTopic)) {
-      setDashboardId('moon');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['earth', 'blue planet'].includes(lowerTopic)) {
-      setDashboardId('earth');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['carbon', 'carbon atom', 'c'].includes(lowerTopic)) {
-      setDashboardId('carbon');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['mitochondria', 'cell', 'mitochondrion'].includes(lowerTopic)) {
-      setDashboardId('mitochondria');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['skeleton', 'bone', 'skeletal system', 'human anatomy'].includes(lowerTopic)) {
-      setDashboardId('skeleton');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['sun', 'star', 'solar'].includes(lowerTopic)) {
-      setDashboardId('sun');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['mercury'].includes(lowerTopic)) {
-      setDashboardId('mercury');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['venus'].includes(lowerTopic)) {
-      setDashboardId('venus');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['mars', 'red planet'].includes(lowerTopic)) {
-      setDashboardId('mars');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['jupiter'].includes(lowerTopic)) {
-      setDashboardId('jupiter');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['saturn'].includes(lowerTopic)) {
-      setDashboardId('saturn');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['uranus'].includes(lowerTopic)) {
-      setDashboardId('uranus');
-      setTopic('');
-      setExplanation(null);
-      return;
-    } else if (['neptune'].includes(lowerTopic)) {
-      setDashboardId('neptune');
-      setTopic('');
-      setExplanation(null);
-      return;
+    // Map keywords directly to selected object structures with fuzzy search/substring checks
+    const targetMappings: Array<{ keywords: string[]; id: DashboardId }> = [
+      { keywords: ['earth', 'blue planet', 'terrestrial'], id: 'earth' },
+      { keywords: ['moon', 'luna', 'lunar'], id: 'moon' },
+      { keywords: ['sun', 'star', 'solar', 'sol', 'helios'], id: 'sun' },
+      { keywords: ['mercury'], id: 'mercury' },
+      { keywords: ['venus'], id: 'venus' },
+      { keywords: ['mars', 'red planet'], id: 'mars' },
+      { keywords: ['jupiter'], id: 'jupiter' },
+      { keywords: ['saturn'], id: 'saturn' },
+      { keywords: ['uranus'], id: 'uranus' },
+      { keywords: ['neptune'], id: 'neptune' },
+      { keywords: ['mitochondria', 'mitochondrion'], id: 'mitochondria' },
+      { keywords: ['cell', 'cellular', 'cytoplasm'], id: 'cell' },
+      { keywords: ['skeleton', 'bone', 'bones', 'skeletal', 'skull', 'anatomy', 'skeletons'], id: 'skeleton' },
+      { keywords: ['human', 'body', 'person', 'homo sapiens', 'man', 'woman', 'people'], id: 'human' },
+      { keywords: ['hydrogen'], id: 'hydrogen' },
+      { keywords: ['helium'], id: 'helium' },
+      { keywords: ['lithium'], id: 'lithium' },
+      { keywords: ['beryllium'], id: 'beryllium' },
+      { keywords: ['boron'], id: 'boron' },
+      { keywords: ['carbon'], id: 'carbon' },
+      { keywords: ['nitrogen'], id: 'nitrogen' },
+      { keywords: ['oxygen'], id: 'oxygen' },
+      { keywords: ['fluorine'], id: 'fluorine' },
+      { keywords: ['neon'], id: 'neon' },
+      { keywords: ['sodium'], id: 'sodium' },
+      { keywords: ['magnesium'], id: 'magnesium' },
+      { keywords: ['aluminum', 'aluminium'], id: 'aluminum' },
+      { keywords: ['silicon'], id: 'silicon' },
+      { keywords: ['phosphorus'], id: 'phosphorus' },
+      { keywords: ['sulfur', 'sulphur'], id: 'sulfur' },
+      { keywords: ['chlorine'], id: 'chlorine' },
+      { keywords: ['argon'], id: 'argon' },
+      { keywords: ['potassium'], id: 'potassium' },
+      { keywords: ['calcium'], id: 'calcium' }
+    ];
+
+    let matchedId: DashboardId | null = null;
+    for (const mapping of targetMappings) {
+      const match = mapping.keywords.some(keyword => {
+        if (keyword.length <= 2) {
+          const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+          return regex.test(lowerTopic);
+        } else {
+          return lowerTopic.includes(keyword);
+        }
+      });
+      if (match) {
+        matchedId = mapping.id;
+        break;
+      }
+    }
+
+    if (matchedId) {
+      setDashboardId(matchedId);
+      
+      // If the query is just a simple jump/show command or simple name,
+      // clear the topic state & explanation to let default state effect load.
+      const isSimpleCommand = 
+        lowerTopic.length < 25 && 
+        (lowerTopic === matchedId || 
+         targetMappings.find(m => m.id === matchedId)?.keywords.some(kw => 
+           lowerTopic === kw || 
+           lowerTopic.includes("go to " + kw) || 
+           lowerTopic.includes("jump to " + kw) || 
+           lowerTopic.includes("show " + kw) || 
+           lowerTopic.includes("select " + kw) || 
+           lowerTopic.includes("switch to " + kw) ||
+           lowerTopic.includes("teleport to " + kw)
+         ));
+      
+      if (isSimpleCommand) {
+        setTopic('');
+        setExplanation(null);
+        return;
+      }
     }
 
     // Dynamic fetch from Gemini proxy for spatial/physical analysis
@@ -517,7 +536,13 @@ export default function App() {
         'Tissue': 'skeleton',
         'Tissues': 'skeleton',
         'Organ': 'skeleton',
-        'Organs': 'skeleton'
+        'Organs': 'skeleton',
+        'Human': 'human',
+        'Human Body': 'human',
+        'Homo Sapiens': 'human',
+        'Brain': 'human',
+        'Cardiovascular': 'human',
+        'Neural Network': 'human'
       };
 
       // Split text strictly into tokens to ignore standard Markdown syntax

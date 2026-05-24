@@ -21,6 +21,7 @@ const OBJECT_CHEMICAL_SPECIES: Record<string, string[]> = {
   uranus: ['H', 'He', 'H₂O'],
   neptune: ['H', 'He', 'H₂O'],
   skeleton: ['P', 'C'],
+  human: ['C₆H₁₂O₆', 'H₂O', 'ATP', 'O', 'CO₂'],
   cell: ['C₆H₁₂O₆', 'H₂O', 'O'],
   mitochondria: ['ATP', 'CO₂', 'O'],
   carbon: ['C'],

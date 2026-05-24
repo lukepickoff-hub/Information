@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type DashboardId = 'sun' | 'mercury' | 'venus' | 'earth' | 'moon' | 'mars' | 'jupiter' | 'saturn' | 'uranus' | 'neptune' | 'cell' | 'mitochondria' | 'skeleton' | 'hydrogen' | 'helium' | 'lithium' | 'beryllium' | 'boron' | 'carbon' | 'nitrogen' | 'oxygen' | 'fluorine' | 'neon' | 'sodium' | 'magnesium' | 'aluminum' | 'silicon' | 'phosphorus' | 'sulfur' | 'chlorine' | 'argon' | 'potassium' | 'calcium';
+export type DashboardId = 'sun' | 'mercury' | 'venus' | 'earth' | 'moon' | 'mars' | 'jupiter' | 'saturn' | 'uranus' | 'neptune' | 'cell' | 'mitochondria' | 'skeleton' | 'human' | 'hydrogen' | 'helium' | 'lithium' | 'beryllium' | 'boron' | 'carbon' | 'nitrogen' | 'oxygen' | 'fluorine' | 'neon' | 'sodium' | 'magnesium' | 'aluminum' | 'silicon' | 'phosphorus' | 'sulfur' | 'chlorine' | 'argon' | 'potassium' | 'calcium';
 
 interface DashboardState {
   activeDashboardId: DashboardId;

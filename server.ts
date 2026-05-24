@@ -71,6 +71,24 @@ async function startServer() {
           
           const status = error?.status || (error?.error?.code);
           const message = error?.message || error?.error?.message || String(error);
+          const lowerMessage = message.toLowerCase();
+
+          // Immediate detection of persistent budget/quota/billing blockades
+          const isQuotaExceeded = 
+            status === 429 && (
+              lowerMessage.includes("quota") || 
+              lowerMessage.includes("limit") || 
+              lowerMessage.includes("exhausted") || 
+              lowerMessage.includes("billing") || 
+              lowerMessage.includes("exceeded") ||
+              lowerMessage.includes("free_tier") ||
+              lowerMessage.includes("generativelanguage")
+            );
+
+          if (isQuotaExceeded) {
+            console.warn(`[Gemini API Hard Quota Block] Daily/monthly quota limit has been exceeded. Aborting continuous retries and cascade attempts to transition directly to high-fidelity offline lesson backups.`);
+            throw new Error(`GEMINI_QUOTA_EXHAUSTED: ${message}`);
+          }
           
           const isRetryable = 
             status === 503 ||
@@ -184,9 +202,13 @@ Create a table with exact numeric data showing how the object changed over time 
       } else {
         try {
           responseText = await generateContentWithRetryAndCascade(ai, prompt, systemInstruction);
-        } catch (cascadeError) {
-          // Safe robust localized fallback to keep the app working offline or when fully out of quota!
-          console.error("All online Gemini servers are fully exhausted, restricted, or unavailable. Dispensing bespoke local Grok-Style lesson fallback:", cascadeError);
+        } catch (cascadeError: any) {
+          const errMsg = cascadeError?.message || String(cascadeError);
+          if (errMsg.includes("GEMINI_QUOTA_EXHAUSTED")) {
+            console.warn(`[Gemini API] Quota limit exceeded for "${topic}". Gracefully dispensing high-fidelity offline local Grok-Style lesson fallback.`);
+          } else {
+            console.warn(`[Gemini API] Services temporarily unavailable (${errMsg.substring(0, 150)}). Dispensing high-fidelity offline local Grok-Style lesson fallback.`);
+          }
           responseText = generateOfflineGrokResponse(topic, additionalRequirements);
         }
       }

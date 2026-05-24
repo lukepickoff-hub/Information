@@ -659,6 +659,42 @@ export const DASHBOARD_DATA: Record<string, DashboardItem> = {
       { step: 5, title: 'Mineral Dissolution (Fossilization)', description: 'Soft tissues disintegrate; bone minerals slowly exchange under pressure to form hard rock fossils.', time: '+10 to +10⁶ yrs', temp: 'Earth crust temp', massOrEnergy: 'Apatite to Stone matrix', probability: 'Low/Medium', imgType: 'death' }
     ]
   },
+  human: {
+    id: 'human',
+    name: 'HUMAN BODY',
+    subtitle: "Complex multicellular organ systems, consciousness, neural network architecture.",
+    mode: 'anatomy',
+    structures: [
+      { name: 'Nervous & Brain Network', number: 1, mass: '1.4 kg (Brain)', energy: '20 W electrical duty', size: '10¹¹ neural nodes', color: '#ec4899' },
+      { name: 'Cardiovascular Loop', number: 1, mass: '5.0 kg blood flow', energy: '1.3 W continuous pumping', size: '100,000 km vessel length', color: '#ef4444' },
+      { name: 'Musculoskeletal Scaffold', number: 206, mass: '12.0 kg dry bone weight', energy: 'Varies by activity', size: '1.7 - 1.8 m avg stature', color: '#10b981' },
+      { name: 'Digestive & Metabolic Core', number: 1, mass: '4.5 kg organs', energy: '8.4 MJ daily metabolic intake', size: '9.0 m GI tract', color: '#8b5cf6' }
+    ],
+    relationships: {
+      formation: [
+        'Time ~280 days gestational differentiation',
+        'Temperature ~310.15 K (37°C) homeostatic core setpoint',
+        'Environment: Intrauterine aquatic incubation, mothers metabolic feeding'
+      ],
+      forces: [
+        { name: 'Homeostatic Osmotic Tension', desc: "Equilibrium fluid pressure gradients across cell bilayers via active sodium-potassium ATPase motors." },
+        { name: 'Electrochemical Nerve Induction', desc: "Voltage-gated potassium and sodium channels trigger rapid depolarizing action potentials." },
+        { name: 'Skeletal Muscle Contraction', desc: "Adenosine-triphosphate (ATP) binds to myosin heads, driving sliding filament cycles against cellular actin." }
+      ],
+      energies: [
+        { name: 'Basal Metabolic Rate', value: '1600 - 2000 kcal/day (~80 W continuous dissipation)' },
+        { name: 'Synaptic Signal Energy', value: '~1.0 × 10⁻¹⁹ J per depolarization pulse' },
+        { name: 'Global Brain Wattage', value: '20 Watts (roughly 20% of resting human energy)' }
+      ]
+    },
+    timeline: [
+      { step: 1, title: 'Zygotic Cleavage', description: 'Single-cell zygote undergoes exponential mitotic division, forming blastocyst and neural tube precursors.', time: 'Days 1 - 21 gestation', temp: '310 K inside maternal womb', massOrEnergy: 'Microscopic cellular cluster', probability: 'High', imgType: 'birth' },
+      { step: 2, title: 'Organogenesis & Birth', description: 'Rapid physical differentiation of hearts, lung structures, and brain cortex. Emergence into atmospheric environment.', time: 'Month 9 gestation / Birth', temp: '310.15 K standard regulatory', massOrEnergy: '3.3 kg newborn average', probability: 'High Completion Ratio', imgType: 'stable' },
+      { step: 3, title: 'Conscious Adult Peak', description: 'Metazoan neural systems reach maximum synaptic complexity, expressing abstract communication, high locomotion, and tool utilization.', time: 'Present Day (Now)', temp: '310.15 K', massOrEnergy: '70 kg average body mass', probability: 'Highly Structured', imgType: 'active' },
+      { step: 4, title: 'Homeostatic Senescence', description: 'Decline in metabolic efficiency, collagen cross-linking stiffness, and systemic loss of cellular reserve capabilities.', time: 'Ages 45 - 85 onward', temp: '310 K maintained', massOrEnergy: 'Slow mitochondrial decay', probability: 'Inevitable biology', imgType: 'future' },
+      { step: 5, title: 'Biological Dissolution', description: 'Irreversible cardiovascular cessation leading to immediate molecular decomposition and return of atoms to outer biosphere carbon/nitrogen pools.', time: 'System death threshold', temp: 'Thermal equalization to environment', massOrEnergy: 'Elemental liberation', probability: 'Certain', imgType: 'death' }
+    ]
+  },
   mercury: {
     id: 'mercury',
     name: 'MERCURY',
