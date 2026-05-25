@@ -417,16 +417,29 @@ export default function App() {
       // If the query is just a simple jump/show command or simple name,
       // clear the topic state & explanation to let default state effect load.
       const isSimpleCommand = 
-        lowerTopic.length < 25 && 
+        lowerTopic.length < 32 && 
         (lowerTopic === matchedId || 
          targetMappings.find(m => m.id === matchedId)?.keywords.some(kw => 
            lowerTopic === kw || 
            lowerTopic.includes("go to " + kw) || 
            lowerTopic.includes("jump to " + kw) || 
            lowerTopic.includes("show " + kw) || 
+           lowerTopic.includes("show me " + kw) || 
            lowerTopic.includes("select " + kw) || 
            lowerTopic.includes("switch to " + kw) ||
-           lowerTopic.includes("teleport to " + kw)
+           lowerTopic.includes("teleport to " + kw) ||
+           lowerTopic.includes("teleport " + kw) ||
+           lowerTopic.includes("focus " + kw) ||
+           lowerTopic.includes("focus on " + kw) ||
+           lowerTopic.includes("find " + kw) ||
+           lowerTopic.includes("find the " + kw) ||
+           lowerTopic.includes("ask " + kw) ||
+           lowerTopic.includes("where is " + kw) ||
+           lowerTopic.includes("where is the " + kw) ||
+           lowerTopic.includes("tell me about " + kw) ||
+           lowerTopic.includes("tell me about the " + kw) ||
+           lowerTopic.includes("tell me more about " + kw) ||
+           lowerTopic.includes("tell me more about the " + kw)
          ));
       
       if (isSimpleCommand) {
@@ -441,6 +454,9 @@ export default function App() {
     setError(null);
     setExplanation(null);
 
+    // Use name of the matched object if found, otherwise default to currently active
+    const activeDataName = matchedId ? (DASHBOARD_DATA[matchedId]?.name || activeData.name) : activeData.name;
+
     try {
       const response = await fetch('/api/explain', {
         method: 'POST',
@@ -449,7 +465,7 @@ export default function App() {
         },
         body: JSON.stringify({ 
           topic: currentTopic, 
-          additionalRequirements: `Analyze ${activeData.name} context. Write a clean, highly structured response summarizing the science, background, dimensions, and spacetime properties of this object. Keep paragraphs readable and output beautiful Markdown.` 
+          additionalRequirements: `Analyze ${activeDataName} context. Write a clean, highly structured response summarizing the science, background, dimensions, and spacetime properties of this object. Keep paragraphs readable and output beautiful Markdown.` 
         }),
       });
 

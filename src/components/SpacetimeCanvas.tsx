@@ -243,9 +243,19 @@ const MoonOrbitLine = ({ earthPos, radius }: { earthPos: [number, number, number
 };
 
 const OrbitalMechanics = () => {
+  const lastPlanetRef = useRef<DashboardId>('earth');
+
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     const interactMode = useDashboardStore.getState().interactMode;
+    const activeId = useDashboardStore.getState().activeDashboardId;
+
+    const PLANET_IDS = ['mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'];
+    if (PLANET_IDS.includes(activeId)) {
+      lastPlanetRef.current = activeId;
+    } else if (activeId === 'moon') {
+      lastPlanetRef.current = 'earth';
+    }
 
     if (!interactMode) {
       // 1. Planetary orbitals spinning smoothly around the Sun
@@ -287,27 +297,33 @@ const OrbitalMechanics = () => {
       const nepAngle = t * 0.025;
       OBJECT_COORDS.neptune = [Math.cos(nepAngle) * 790, 0, Math.sin(nepAngle) * 790];
 
-      // 2. Microscopic & biologic objects travel alongside the Earth on its orbit!
-      // Skeletal structure (represented on Earth's surface offset boundary)
-      OBJECT_COORDS.skeleton = [ex + 2.0, 0, ez];
+      // 2. Microscopic & biologic objects travel alongside the active planet on its orbit!
+      const lastPlanetId = lastPlanetRef.current;
+      const parentCoords = OBJECT_COORDS[lastPlanetId] || OBJECT_COORDS.earth;
+      const px = parentCoords[0];
+      const py = parentCoords[1];
+      const pz = parentCoords[2];
+
+      // Skeletal structure (represented on planet's surface offset boundary)
+      OBJECT_COORDS.skeleton = [px + 2.0, py, pz];
 
       // Human Body structure (clamped near the biological cluster)
-      OBJECT_COORDS.human = [ex + 2.0, -0.2, ez + 1.2];
+      OBJECT_COORDS.human = [px + 2.0, py - 0.2, pz + 1.2];
 
       // Cell
-      OBJECT_COORDS.cell = [ex + 2.0, 1.2, ez];
+      OBJECT_COORDS.cell = [px + 2.0, py + 1.2, pz];
 
       // Mitochondria nested near cell structures
-      OBJECT_COORDS.mitochondria = [ex + 2.0, 1.2, ez + 0.8];
+      OBJECT_COORDS.mitochondria = [px + 2.0, py + 1.2, pz + 0.8];
 
       // Arrange first 20 atoms in a beautiful micro-atomic spiral cluster revolving around the cell
       ATOM_IDS.forEach((atomId, index) => {
         const theta = (index / 20) * Math.PI * 2;
         const radius = 0.5 + (index * 0.06); // Spiral cluster dispersion
         OBJECT_COORDS[atomId] = [
-          ex + 2.0 + Math.cos(theta) * radius,
-          1.2 + Math.sin(theta * 1.5) * 0.1,
-          ez + Math.sin(theta) * radius
+          px + 2.0 + Math.cos(theta) * radius,
+          py + 1.2 + Math.sin(theta * 1.5) * 0.1,
+          pz + Math.sin(theta) * radius
         ];
       });
     }
@@ -1579,11 +1595,23 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
   const { camera, size } = useThree();
   const controlsRef = useRef<any>(null);
   const activeIdRef = useRef<DashboardId | null>(null);
+  const transitionFramesRef = useRef<number>(0);
   const setDashboardId = useDashboardStore(s => s.setDashboardId);
+  const lastPlanetRef = useRef<DashboardId>('earth');
+
+  // Reset frame transition counter when active focus target changes
+  useEffect(() => {
+    transitionFramesRef.current = 0;
+  }, [activeId]);
 
   useEffect(() => {
     const handleZoomEvent = (e: any) => {
       if (!controlsRef.current) return;
+      
+      // Instantly finish transition to grant the manual zoom button full priority
+      activeIdRef.current = activeId;
+      transitionFramesRef.current = 100;
+
       const target = controlsRef.current.target;
       const dir = camera.position.clone().sub(target);
       
@@ -1604,7 +1632,29 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
 
     window.addEventListener('spacetime-zoom', handleZoomEvent as any);
     return () => window.removeEventListener('spacetime-zoom', handleZoomEvent as any);
-  }, [camera]);
+  }, [camera, activeId]);
+
+  // Dedicated helper to fire active transition shifts cleanly
+  const executeSeamlessTransition = (nextTargetId: DashboardId, distances: Record<string, number>) => {
+    activeIdRef.current = nextTargetId;
+    setDashboardId(nextTargetId);
+
+    const nextCoords = new THREE.Vector3(
+      OBJECT_COORDS[nextTargetId][0],
+      OBJECT_COORDS[nextTargetId][1],
+      OBJECT_COORDS[nextTargetId][2]
+    );
+    const nextTargetDistance = distances[nextTargetId] || 0.0004;
+    const currentTarget = controlsRef.current.target;
+    const dir = camera.position.clone().sub(currentTarget);
+    if (dir.lengthSq() === 0) dir.set(0, 0, 1);
+    dir.normalize();
+
+    // Position camera cleanly along the same direction line at the entry bounds of the new context
+    camera.position.copy(nextCoords).add(dir.multiplyScalar(nextTargetDistance * 1.5));
+    currentTarget.copy(nextCoords);
+    controlsRef.current.update();
+  };
 
   useFrame(() => {
     const { simulationActive } = useDashboardStore.getState();
@@ -1656,6 +1706,8 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
       }
     });
 
+    const currentTargetDist = targetDistances[activeId] || 200;
+
     if (controlsRef.current) {
       const targetCoordsVec = new THREE.Vector3(
         OBJECT_COORDS[activeId][0],
@@ -1666,92 +1718,118 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
       const currentTarget = controlsRef.current.target;
       const currentDist = camera.position.distanceTo(currentTarget);
 
+      if (activeIdRef.current !== activeId) {
+        transitionFramesRef.current++;
+      }
+
+      // Track last host planet dynamically
+      const PLANET_IDS = ['mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'];
+      if (PLANET_IDS.includes(activeId)) {
+        lastPlanetRef.current = activeId;
+      } else if (activeId === 'moon') {
+        lastPlanetRef.current = 'earth';
+      }
+
       // --- SEAMLESS SCALE TRANSITION ZOOMING CONTROL ---
       // Monitors real-time distance and automatically steps into smaller/larger physical scales
       if (activeIdRef.current === activeId) {
         const isPlanet = ['mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'moon'].includes(activeId);
-        let minDist = 0.05;
-        let maxDist = 50.0;
+        
+        // Define exact physical radii of planet bodies to establish intelligent surface thresholds
+        const planetRadii: Record<string, number> = {
+          mercury: 0.38,
+          venus: 0.95,
+          earth: 1.0,
+          moon: 0.26,
+          mars: 0.53,
+          jupiter: 11.2,
+          saturn: 9.4,
+          uranus: 4.0,
+          neptune: 3.9
+        };
+
+        const radius = planetRadii[activeId] || 1.0;
+        // Zooming closer than 1.35x of the active planet surface shifts focus into microscope modes to view local anatomy
+        const minDist = activeId === 'sun' ? 35.0 : (isPlanet ? radius * 1.35 : currentTargetDist * 0.15);
+        const maxDist = currentTargetDist * 3.5;
+
         let nextId: DashboardId | null = null;
         let prevId: DashboardId | null = null;
 
         if (activeId === 'sun') {
-          minDist = 35.0;
-          maxDist = 15000.0;
+          // Default sun limits
+          const dynamicMin = 35.0;
           nextId = 'earth';
           prevId = null;
+
+          if (currentDist < dynamicMin && nextId) {
+            executeSeamlessTransition(nextId, targetDistances);
+            return;
+          }
         } else if (isPlanet) {
-          minDist = 0.35;
-          maxDist = 45.0; // Zoom out to astronomical scale
           nextId = 'human';
-          prevId = 'sun';
+          prevId = activeId === 'moon' ? 'earth' : 'sun';
+
+          if (currentDist < minDist && nextId) {
+            executeSeamlessTransition(nextId, targetDistances);
+            return;
+          } else if (currentDist > maxDist && prevId) {
+            executeSeamlessTransition(prevId, targetDistances);
+            return;
+          }
         } else if (activeId === 'human') {
-          minDist = 0.015;
-          maxDist = 0.35;
           nextId = 'skeleton';
-          prevId = 'earth';
+          prevId = lastPlanetRef.current || 'earth';
+
+          if (currentDist < minDist && nextId) {
+            executeSeamlessTransition(nextId, targetDistances);
+            return;
+          } else if (currentDist > maxDist && prevId) {
+            executeSeamlessTransition(prevId, targetDistances);
+            return;
+          }
         } else if (activeId === 'skeleton') {
-          minDist = 0.007;
-          maxDist = 0.015;
           nextId = 'cell';
           prevId = 'human';
+
+          if (currentDist < minDist && nextId) {
+            executeSeamlessTransition(nextId, targetDistances);
+            return;
+          } else if (currentDist > maxDist && prevId) {
+            executeSeamlessTransition(prevId, targetDistances);
+            return;
+          }
         } else if (activeId === 'cell') {
-          minDist = 0.0022;
-          maxDist = 0.007;
           nextId = 'mitochondria';
           prevId = 'skeleton';
+
+          if (currentDist < minDist && nextId) {
+            executeSeamlessTransition(nextId, targetDistances);
+            return;
+          } else if (currentDist > maxDist && prevId) {
+            executeSeamlessTransition(prevId, targetDistances);
+            return;
+          }
         } else if (activeId === 'mitochondria') {
-          minDist = 0.0010;
-          maxDist = 0.0022;
           nextId = 'carbon'; // Default to Carbon Atom when zooming down organelles
           prevId = 'cell';
+
+          if (currentDist < minDist && nextId) {
+            executeSeamlessTransition(nextId, targetDistances);
+            return;
+          } else if (currentDist > maxDist && prevId) {
+            executeSeamlessTransition(prevId, targetDistances);
+            return;
+          }
         } else if (ATOM_IDS.includes(activeId)) {
-          minDist = 1e-15; // Unlimited nucleus/subatomic zoom
-          maxDist = 0.0010;
           nextId = null;
           prevId = 'mitochondria';
-        }
 
-        if (currentDist < minDist && nextId) {
-          // STEP DOWN/ZOOM IN: seamless transition into smaller organic or atomic levels
-          activeIdRef.current = nextId;
-          setDashboardId(nextId);
-
-          const nextCoords = new THREE.Vector3(
-            OBJECT_COORDS[nextId][0],
-            OBJECT_COORDS[nextId][1],
-            OBJECT_COORDS[nextId][2]
-          );
-          const nextTargetDistance = targetDistances[nextId] || 0.0004;
-          const dir = camera.position.clone().sub(currentTarget);
-          if (dir.lengthSq() === 0) dir.set(0, 0, 1);
-          dir.normalize();
-
-          // Reposition camera cleanly at outer threshold of next target along the same perspective line
-          camera.position.copy(nextCoords).add(dir.multiplyScalar(nextTargetDistance * 1.5));
-          currentTarget.copy(nextCoords);
-          controlsRef.current.update();
-          return;
-        } else if (currentDist > maxDist && prevId) {
-          // STEP UP/ZOOM OUT: seamless transition into larger astronomical or physiological layers
-          activeIdRef.current = prevId;
-          setDashboardId(prevId);
-
-          const prevCoords = new THREE.Vector3(
-            OBJECT_COORDS[prevId][0],
-            OBJECT_COORDS[prevId][1],
-            OBJECT_COORDS[prevId][2]
-          );
-          const prevTargetDistance = targetDistances[prevId] || 200;
-          const dir = camera.position.clone().sub(currentTarget);
-          if (dir.lengthSq() === 0) dir.set(0, 0, 1);
-          dir.normalize();
-
-          // Reposition camera cleanly inside the parent scale bounds along the same perspective line
-          camera.position.copy(prevCoords).add(dir.multiplyScalar(prevTargetDistance * 0.75));
-          currentTarget.copy(prevCoords);
-          controlsRef.current.update();
-          return;
+          // Note: minDist is 1e-15 for unlimited atom levels (no lower limit zoom boundary)
+          if (currentDist > maxDist && prevId) {
+            executeSeamlessTransition(prevId, targetDistances);
+            return;
+          }
         }
       }
 
@@ -1759,7 +1837,6 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
       if (activeIdRef.current !== activeId) {
         // Transitional Lerp to lock onto the newly selected target's position
         const targetDist = (targetDistances[activeId] || 200) * aspectAdjustment;
-        const currentTarget = controlsRef.current.target;
         currentTarget.lerp(targetCoordsVec, 0.08);
 
         const dir = camera.position.clone().sub(currentTarget);
@@ -1770,13 +1847,19 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
         camera.position.copy(currentTarget.clone().add(dir.multiplyScalar(newDist)));
         controlsRef.current.update();
 
-        // Finish transition if close enough
-        if (currentTarget.distanceTo(targetCoordsVec) < targetDist * 0.15 && Math.abs(currentDist - targetDist) < targetDist * 0.1) {
+        // Finish transition if close enough OR if we have been transitioning for at least 32 frames (fail-safe)
+        const currentDistanceToTarget = currentTarget.distanceTo(targetCoordsVec);
+        const relativeDistDiff = Math.abs(currentDist - targetDist) / targetDist;
+        
+        if (
+          transitionFramesRef.current >= 32 ||
+          ((currentDistanceToTarget < 0.2 || currentDistanceToTarget / (targetDist + 1) < 0.05) && 
+           (relativeDistDiff < 0.15 || currentDistanceToTarget < 0.1))
+        ) {
           activeIdRef.current = activeId;
         }
       } else {
         // Lock and Travel: Camera moves in sync with the orbital target's coordinates
-        const currentTarget = controlsRef.current.target;
         const delta = targetCoordsVec.clone().sub(currentTarget);
         
         // Translate camera with the planet/object’s orbit
@@ -1796,6 +1879,11 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
       maxDistance={1e18}
       enableDamping
       dampingFactor={0.05}
+      onStart={() => {
+        // Touching, dragging, or mousewheel scrolling instantly finishes automated translation locking
+        activeIdRef.current = activeId;
+        transitionFramesRef.current = 100;
+      }}
     />
   );
 };
@@ -2181,13 +2269,15 @@ interface SpacetimeSimulationViewerProps {
   orbitalExcitation?: number;
   showBohrTracks?: boolean;
   showFieldForceLines?: boolean;
+  collisionSpeedPct?: number;
 }
 
 const SpacetimeSimulationViewer: React.FC<SpacetimeSimulationViewerProps> = ({
   cloudDensity = 40,
   orbitalExcitation = 1.5,
   showBohrTracks = true,
-  showFieldForceLines = true
+  showFieldForceLines = true,
+  collisionSpeedPct = 50
 }) => {
   const { simulationActive, simulationSelected } = useDashboardStore();
   const groupRef = useRef<THREE.Group>(null);
@@ -2198,27 +2288,34 @@ const SpacetimeSimulationViewer: React.FC<SpacetimeSimulationViewerProps> = ({
   // High-frequency kinetic spark emitter states
   const [ionicElectronT, setIonicElectronT] = useState(0);
 
+  // Determine physics domain of active reaction to implement custom domain velocity logic
+  const details = getReactionDetails(simulationSelected);
+  const isNuclear = details ? details.type === 'nuclear' : false;
+  // Kinetic energy multiplier scales dynamically based on speed input percentage (representing temperature & thermal excitation)
+  // Nuclear domain features higher relativistic velocities, so the scale multiplier has a higher baseline.
+  const speedMultiplier = (isNuclear ? 2.5 : 1.0) * (0.1 + (collisionSpeedPct / 100) * 2.9);
+
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     if (groupRef.current) {
-      groupRef.current.rotation.y = t * 0.15;
-      groupRef.current.rotation.x = t * 0.05;
+      groupRef.current.rotation.y = t * 0.15 * speedMultiplier;
+      groupRef.current.rotation.x = t * 0.05 * speedMultiplier;
     }
     if (particleGroupRef.current) {
-      particleGroupRef.current.rotation.y = -t * 0.3 * orbitalExcitation;
+      particleGroupRef.current.rotation.y = -t * 0.3 * orbitalExcitation * speedMultiplier;
     }
     
     // Animate ionic transfer packet
-    setIonicElectronT((prev) => (prev + 0.03 * orbitalExcitation) % 1.0);
+    setIonicElectronT((prev) => (prev + 0.03 * orbitalExcitation * speedMultiplier) % 1.0);
 
     // Periodic flash trigger for Fusion
     if (coreFlashRef1.current) {
-      const flashValue = Math.max(0, Math.sin(t * 1.5 * orbitalExcitation));
+      const flashValue = Math.max(0, Math.sin(t * 1.5 * orbitalExcitation * speedMultiplier));
       (coreFlashRef1.current.material as THREE.MeshBasicMaterial).opacity = flashValue * 0.25;
       coreFlashRef1.current.scale.setScalar(1.0 + flashValue * 1.2);
     }
     if (coreFlashRef2.current) {
-      const flashValue2 = Math.max(0, Math.sin(t * 1.5 * orbitalExcitation + Math.PI / 2));
+      const flashValue2 = Math.max(0, Math.sin(t * 1.5 * orbitalExcitation * speedMultiplier + Math.PI / 2));
       (coreFlashRef2.current.material as THREE.MeshBasicMaterial).opacity = flashValue2 * 0.2;
       coreFlashRef2.current.scale.setScalar(1.0 + flashValue2 * 1.8);
     }
@@ -2300,7 +2397,7 @@ const SpacetimeSimulationViewer: React.FC<SpacetimeSimulationViewerProps> = ({
 
           {/* Shared Covalent figure-8 valence electron trails */}
           {Array.from({ length: Math.round(cloudDensity / 8) }).map((_, i) => {
-            const speedFact = 1.6 * orbitalExcitation;
+            const speedFact = 1.6 * orbitalExcitation * speedMultiplier;
             const delayOffset = (i * Math.PI * 2) / Math.round(cloudDensity / 8);
             
             return (
@@ -2402,7 +2499,7 @@ const SpacetimeSimulationViewer: React.FC<SpacetimeSimulationViewerProps> = ({
 
           {/* High density linear shared electrons */}
           {Array.from({ length: Math.round(cloudDensity / 8) }).map((_, i) => {
-            const speedFact = 1.8 * orbitalExcitation;
+            const speedFact = 1.8 * orbitalExcitation * speedMultiplier;
             const delayOffset = (i * Math.PI * 2) / Math.round(cloudDensity / 8);
             
             return (
@@ -2468,7 +2565,7 @@ const SpacetimeSimulationViewer: React.FC<SpacetimeSimulationViewerProps> = ({
           {Array.from({ length: 4 }).map((_, i) => {
             const r = 2.8;
             return (
-              <Float key={i} speed={4 * orbitalExcitation} rotationIntensity={0.8} floatIntensity={0.6}>
+              <Float key={i} speed={4 * orbitalExcitation * speedMultiplier} rotationIntensity={0.8} floatIntensity={0.6}>
                 <mesh position={[Math.sin(i * 1.5) * r, Math.cos(i * 1.5) * r * 0.4, Math.sin(i * 2) * 0.5]}>
                   <sphereGeometry args={[0.22, 12, 12]} />
                   <meshBasicMaterial color="#ef4444" toneMapped={false} />
@@ -3531,6 +3628,7 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
           orbitalExcitation={orbitalExcitation}
           showBohrTracks={showBohrTracks}
           showFieldForceLines={showFieldForceLines}
+          collisionSpeedPct={collisionSpeedPct}
         />
 
         {/* Scene Objects */}
