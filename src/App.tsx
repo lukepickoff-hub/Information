@@ -178,6 +178,7 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isCustomQueryRef = useRef(false);
   
   // Real-time space states
   const { setMode } = useModeStore();
@@ -259,6 +260,13 @@ export default function App() {
   // Automatically fetch AI explanation for the active object if not cached
   useEffect(() => {
     if (!activeData) return;
+
+    // Prevent overwriting customer's specific question explanation with a broad object summary
+    if (isCustomQueryRef.current) {
+      isCustomQueryRef.current = false;
+      return;
+    }
+
     const objectName = activeData.name;
     
     // Default to clear topic and use cached if available
@@ -412,8 +420,6 @@ export default function App() {
     }
 
     if (matchedId) {
-      setDashboardId(matchedId);
-      
       // If the query is just a simple jump/show command or simple name,
       // clear the topic state & explanation to let default state effect load.
       const isSimpleCommand = 
@@ -441,6 +447,11 @@ export default function App() {
            lowerTopic.includes("tell me more about " + kw) ||
            lowerTopic.includes("tell me more about the " + kw)
          ));
+      
+      if (!isSimpleCommand) {
+        isCustomQueryRef.current = true;
+      }
+      setDashboardId(matchedId);
       
       if (isSimpleCommand) {
         setTopic('');

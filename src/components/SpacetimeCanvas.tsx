@@ -3112,6 +3112,55 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
     ) as Record<DashboardId, { title: string }>
   };
 
+  // --- DYNAMIC COLLISION CALCULATIONS FOR HUD SIMULATION ---
+  const simDetails = getReactionDetails(simulationSelected);
+  const isNuclear = simDetails ? simDetails.type === 'nuclear' : false;
+  
+  // Speed definitions (nuclear works as speed of light fractions, chemical/other works as thermal km/s speeds)
+  const speedVal = isNuclear 
+    ? (0.01 + (collisionSpeedPct / 100) * 0.19) 
+    : (1.0 + (collisionSpeedPct / 100) * 39.0);
+  const formattedSpeed = isNuclear
+    ? `${speedVal.toFixed(3)}c`
+    : `${speedVal.toFixed(1)} km/s`;
+
+  // Get reactants total & reduced mass
+  const reactantsList = getReactionReactants(activeReaction, simulationSelected);
+  const hasCelestial = reactantsList.some(r => r.mass > 1e10);
+  const totalMassVal = reactantsList.reduce((sum, r) => sum + r.mass, 0);
+  const totalMassStr = hasCelestial
+    ? `${totalMassVal.toExponential(3)} kg`
+    : `${totalMassVal.toFixed(4)} amu`;
+
+  let reducedMass = 0;
+  if (reactantsList.length > 0) {
+    const masses = reactantsList.map(r => r.mass);
+    if (masses.length === 1) {
+      reducedMass = masses[0];
+    } else if (masses.length === 2) {
+      reducedMass = (masses[0] * masses[1]) / (masses[0] + masses[1]);
+    } else {
+      const denom = (masses[0] * masses[1]) + (masses[1] * masses[2]) + (masses[2] * masses[0]);
+      reducedMass = denom > 0 ? (masses[0] * masses[1] * masses[2]) / denom : 0;
+    }
+  }
+  const reducedMassStr = hasCelestial 
+    ? `${reducedMass.toExponential(3)} kg`
+    : `${reducedMass.toFixed(4)} amu`;
+
+  // Calculate kinetic energy in appropriate physics scale
+  let E_kin = 0;
+  let E_kin_str = "";
+  if (isNuclear) {
+    // E_kin = 0.5 * reducedMass * beta^2 * 931.494 MeV
+    E_kin = 0.5 * reducedMass * (speedVal * speedVal) * 931.494;
+    E_kin_str = `${E_kin.toFixed(3)} MeV`;
+  } else {
+    // E_kin = 0.5 * reducedMass_amu * v^2 in kJ/mol
+    E_kin = 0.5 * (hasCelestial ? 12.0 : reducedMass) * (speedVal * speedVal); 
+    E_kin_str = `${E_kin.toLocaleString(undefined, { maximumFractionDigits: 1 })} kJ/mol`;
+  }
+
   return (
     <div className="w-full h-full relative bg-black">
       {/* 2D Absolute Overlay Cards for Simulation Mode */}
@@ -3161,6 +3210,33 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
               </div>
             )}
           </div>
+
+          {simulationSelected.length > 0 && (
+            <div className="bg-black/40 border border-[#a855f7]/20 p-3 rounded-lg space-y-2 font-mono">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-pink-400 font-bold uppercase tracking-wider">Collision Speed</span>
+                <span className="text-[10px] text-cyan-300 font-bold font-mono bg-cyan-950/40 border border-cyan-800/30 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(34,211,238,0.1)]">{formattedSpeed}</span>
+              </div>
+              <input 
+                type="range"
+                min="1"
+                max="100"
+                value={collisionSpeedPct}
+                onChange={(e) => setCollisionSpeedPct(parseInt(e.target.value))}
+                className="w-full h-1 bg-neutral-800 accent-purple-400 rounded-lg cursor-pointer"
+              />
+              <div className="flex justify-between text-[7px] text-white/30 px-0.5 select-none uppercase">
+                <span>{isNuclear ? '0.01c' : '1.0 km/s'}</span>
+                <span>{isNuclear ? '0.10c' : '20 km/s'}</span>
+                <span>{isNuclear ? '0.20c' : '40 km/s'}</span>
+              </div>
+              
+              <div className="flex justify-between items-center text-[9px] text-white/50 border-t border-white/5 pt-1.5 mt-1 select-none">
+                <span>PROJECTED KINETIC ENERGY:</span>
+                <span className="text-purple-300 font-bold font-mono">{E_kin_str}</span>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button
@@ -3303,27 +3379,6 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
                         <span className="text-[9px] text-cyan-400 font-mono text-right">{r.mass > 1e10 ? `${r.mass.toExponential(2)} kg` : `${r.mass.toFixed(4)} amu`}</span>
                       </div>
                     ))}
-                  </div>
-                </div>
-
-                {/* Collision Accelerator Controls */}
-                <div className="bg-black/40 border border-white/5 p-2 rounded space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[8.5px] text-pink-400 font-bold uppercase tracking-wider">Ion velocity accelerator</span>
-                    <span className="text-[10px] text-cyan-300 font-bold font-mono bg-cyan-950/40 border border-cyan-800/30 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(34,211,238,0.1)]">{formattedSpeed}</span>
-                  </div>
-                  <input 
-                    type="range"
-                    min="1"
-                    max="100"
-                    value={collisionSpeedPct}
-                    onChange={(e) => setCollisionSpeedPct(parseInt(e.target.value))}
-                    className="w-full h-1 bg-neutral-800 accent-purple-400 rounded-lg cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[7.5px] text-white/30 px-0.5 select-none uppercase">
-                    <span>{isNuclear ? '0.01c (Thermal)' : '1.0 km/s'}</span>
-                    <span>{isNuclear ? '0.10c (Warm core)' : '20 km/s'}</span>
-                    <span>{isNuclear ? '0.20c (Relativistic)' : '40 km/s'}</span>
                   </div>
                 </div>
 

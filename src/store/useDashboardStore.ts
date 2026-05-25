@@ -36,7 +36,14 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   quantumView: true,
   setShowAnnotations: (show) => set({ showAnnotations: show }),
   setQuantumView: (val) => set({ quantumView: val }),
-  setDashboardId: (id) => set({ activeDashboardId: id, activeTimelineStep: 1 }), // default to birth on object swap
+  setDashboardId: (id) => set({ 
+    activeDashboardId: id, 
+    activeTimelineStep: 1,
+    simulationMode: false,
+    simulationActive: false,
+    interactMode: false,
+    activeReaction: null
+  }), // default to birth and clear simulation mode on object swap
   setTimelineStep: (step) => set({ activeTimelineStep: step }),
   setInteractMode: (mode) => set({ interactMode: mode }),
   setSimulationMode: (enabled) => set((state) => {
