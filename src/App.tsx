@@ -16,6 +16,8 @@ import { ELEMENTS } from './data/elements';
 import { PARTICLE_TABLE_DATA, QUANTITY_OVER_TIME, MOLECULE_COMPOSITIONS } from './data/chemistryData';
 import { ChemistryMatrix } from './components/ChemistryMatrix';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
+import { ReactionCatalog } from './components/ReactionCatalog';
+import { ReactionItem } from './data/reactionData';
 
 const TIME_MAPPING: Record<string, { start: number; label: string; unit: string }> = {
   sun: { start: 4.6, label: 'Billion Years Ago', unit: 'Ga' },
@@ -93,6 +95,49 @@ const preprocessScientificMath = (text: string): string => {
   return res;
 };
 
+const mapAtomsToDashboardIds = (rx: any): DashboardId[] => {
+  const result: DashboardId[] = [];
+  const lowercaseQuery = (rx.name + " " + rx.equation + " " + rx.subCategory + " " + rx.description).toLowerCase();
+  
+  const map: { keywords: string[], id: DashboardId }[] = [
+    { keywords: ['hydrogen', '¹h', 'deuterium', '²h'], id: 'hydrogen' },
+    { keywords: ['helium', '³he', '⁴he'], id: 'helium' },
+    { keywords: ['lithium'], id: 'lithium' },
+    { keywords: ['beryllium'], id: 'beryllium' },
+    { keywords: ['boron'], id: 'boron' },
+    { keywords: ['carbon', '¹²c', '¹³c', 'co₂', 'dioxide'], id: 'carbon' },
+    { keywords: ['nitrogen', '¹³n', '¹⁴n', '¹⁵n', 'n₂', 'ammonia', 'nh₃'], id: 'nitrogen' },
+    { keywords: ['oxygen', '¹⁵o', '¹⁶o', 'o₂'], id: 'oxygen' },
+    { keywords: ['fluorine'], id: 'fluorine' },
+    { keywords: ['neon'], id: 'neon' },
+    { keywords: ['sodium', 'na⁺'], id: 'sodium' },
+    { keywords: ['magnesium'], id: 'magnesium' },
+    { keywords: ['aluminum'], id: 'aluminum' },
+    { keywords: ['silicon'], id: 'silicon' },
+    { keywords: ['phosphorus'], id: 'phosphorus' },
+    { keywords: ['sulfur'], id: 'sulfur' },
+    { keywords: ['chlorine', 'cl⁻', 'nacl'], id: 'chlorine' },
+    { keywords: ['argon'], id: 'argon' },
+    { keywords: ['potassium'], id: 'potassium' },
+    { keywords: ['calcium', 'ca²⁺'], id: 'calcium' },
+    { keywords: ['mitochondria'], id: 'mitochondria' },
+    { keywords: ['cell', 'glucose', 'water', 'h₂o', 'photosynthesis'], id: 'cell' },
+    { keywords: ['earth'], id: 'earth' },
+    { keywords: ['moon'], id: 'moon' },
+    { keywords: ['sun'], id: 'sun' },
+    { keywords: ['human', 'adrenaline', 'serotonin', 'sweat', 'brain'], id: 'human' },
+    { keywords: ['skeleton', 'hydroxyapatite', 'bone'], id: 'skeleton' }
+  ];
+
+  for (const entry of map) {
+    if (entry.keywords.some(kw => lowercaseQuery.includes(kw))) {
+      result.push(entry.id);
+    }
+  }
+
+  return result.slice(0, 3);
+};
+
 export default function App() {
   const [topic, setTopic] = useState('');
   const [explanation, setExplanation] = useState<string | null>(null);
@@ -105,7 +150,7 @@ export default function App() {
     return false;
   });
   const [sliderPercent, setSliderPercent] = useState(100);
-  const [specsTab, setSpecsTab] = useState<'ledger' | 'biosphere'>('ledger');
+  const [specsTab, setSpecsTab] = useState<'ledger' | 'biosphere' | 'reactions'>('ledger');
   const [bioSearch, setBioSearch] = useState('');
   const [bioCategory, setBioCategory] = useState('All');
   const [expandedBioIds, setExpandedBioIds] = useState<Set<string>>(new Set());
@@ -793,11 +838,22 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
               }`}
             >
               <Leaf className={`w-3 h-3 ${specsTab === 'biosphere' ? 'text-emerald-400' : 'text-white/30'}`} />
-              CELL BIOSPHERE ({ORGANISMS_DATA.length})
+              BIOSPHERE ({ORGANISMS_DATA.length})
+            </button>
+            <button
+              onClick={() => setSpecsTab('reactions')}
+              className={`flex-1 py-3 text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                specsTab === 'reactions'
+                  ? 'text-purple-300 bg-purple-950/10 shadow-[inset_0_-2px_0_#a855f7]'
+                  : 'text-white/40 hover:text-purple-400/60 hover:bg-purple-950/5'
+              }`}
+            >
+              <FlaskConical className={`w-3 h-3 ${specsTab === 'reactions' ? 'text-purple-400' : 'text-white/30'}`} />
+              REACTIONS
             </button>
           </div>
 
-          {specsTab === 'ledger' ? (
+          {specsTab === 'ledger' && (
             <>
               {/* Glowing input bar for questions */}
               <div className="bg-[#050508] border-b border-white/5 p-4 shrink-0">
@@ -889,7 +945,9 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
                 </div>
               </div>
             </>
-          ) : (
+          )}
+
+          {specsTab === 'biosphere' && (
             /* Biosphere Explorer View integrated inside the panel */
             <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-[#030305]">
               {/* Search & Filter bar inside the panel */}
@@ -1045,6 +1103,29 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
                 })()}
               </div>
             </div>
+          )}
+
+          {specsTab === 'reactions' && (
+            <ReactionCatalog 
+              onAskAI={(question) => {
+                setTopic(question);
+                setSpecsTab('ledger');
+                handleSubmit(undefined, question);
+              }}
+              onTriggerReactionInChamber={(rx) => {
+                const elementsToDeposit = mapAtomsToDashboardIds(rx);
+                // Turn on simulation mode
+                useDashboardStore.getState().setSimulationMode(true);
+                // Reset simulation selected
+                useDashboardStore.setState({ simulationSelected: [] });
+                // Deposit elements sequentially
+                for (const el of elementsToDeposit) {
+                  useDashboardStore.getState().toggleSimulationSelected(el);
+                }
+                // Automatically set simulation active/trigger collision!
+                useDashboardStore.getState().setSimulationActive(true);
+              }}
+            />
           )}
         </div>
 
