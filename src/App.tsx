@@ -974,7 +974,7 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
 
                 {/* Elegant micro category carousel */}
                 <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin select-none">
-                  {['All', 'Plant', 'Marine Plant', 'Fungi', 'Mammal', 'Bird', 'Reptile', 'Marine Animal', 'Insect', 'Amphibian', 'Mollusk'].map((cat) => {
+                  {['All', 'Plant', 'Marine Plant', 'Fungi', 'Mammal', 'Bird', 'Reptile', 'Marine Animal', 'Insect', 'Amphibian', 'Mollusk', 'Prokaryote', 'Protista'].map((cat) => {
                     const isSelected = bioCategory === cat;
                     return (
                       <button
@@ -1116,6 +1116,8 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
                 const elementsToDeposit = mapAtomsToDashboardIds(rx);
                 // Turn on simulation mode
                 useDashboardStore.getState().setSimulationMode(true);
+                // Set the active reaction in store
+                useDashboardStore.getState().setActiveReaction(rx);
                 // Reset simulation selected
                 useDashboardStore.setState({ simulationSelected: [] });
                 // Deposit elements sequentially

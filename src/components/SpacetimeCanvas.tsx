@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html, Grid, Line, Float } from '@react-three/drei';
 import * as THREE from 'three';
@@ -421,6 +421,7 @@ const SpacetimeSun = () => {
             <meshBasicMaterial color="#06b6d4" transparent opacity={0.25} wireframe />
           </mesh>
         )}
+        <StructuralAnnotations id="sun" />
       </group>
     </DynamicPosition>
   );
@@ -539,6 +540,7 @@ const SpacetimeEarth = () => {
           side={THREE.BackSide}
         />
       </mesh>
+      <StructuralAnnotations id="earth" />
     </DynamicPosition>
   );
 };
@@ -771,6 +773,7 @@ const SpacetimeCell = () => {
             <meshStandardMaterial color="#3b82f6" />
           </mesh>
         </Float>
+        <StructuralAnnotations id="mitochondria" />
       </group>
     </DynamicPosition>
   );
@@ -905,6 +908,7 @@ const SpacetimeEukaryoticCell = () => {
             </group>
           )}
         </Float>
+        <StructuralAnnotations id="cell" />
       </group>
     </DynamicPosition>
   );
@@ -1036,6 +1040,7 @@ const SpacetimeSkeleton = () => {
             />
           );
         })}
+        <StructuralAnnotations id="skeleton" />
       </group>
     </DynamicPosition>
   );
@@ -1167,6 +1172,7 @@ const SpacetimeHuman = () => {
             );
           })}
         </group>
+        <StructuralAnnotations id="human" />
       </group>
     </DynamicPosition>
   );
@@ -1578,19 +1584,144 @@ export const getReactionDetails = (selected: DashboardId[]): ReactionData => {
   };
 };
 
-const SpacetimeSimulationViewer = () => {
+// 5. Context-aware Interactive Structural Annotations
+export const STRUCTURAL_ANNOTATIONS: Record<string, { name: string; desc: string; pos: [number, number, number]; labelOffset: [number, number, number] }[]> = {
+  sun: [
+    { name: "Thermonuclear Core", desc: "Temperatures exceed 15M Kelvin. Extreme plasma density fuses 600M tons of hydrogen per second.", pos: [0, 0, 0], labelOffset: [35, 45, 10] },
+    { name: "Radiative Zone", desc: "Thermal gamma photons bounce inside dense helium ions for up to 100,000 years to escape.", pos: [55, 30, 0], labelOffset: [85, 75, 15] },
+    { name: "Convective Zone", desc: "Boiling convection plasma currents cycle thermal kinetic buoyancy up to the photosphere.", pos: [85, -45, 0], labelOffset: [115, -70, 10] },
+    { name: "Magnetic Corona", desc: "Superheated outer solar boundary atmosphere held by oscillating high-tension magnetic loops.", pos: [110, 65, 0], labelOffset: [125, 100, 20] }
+  ],
+  earth: [
+    { name: "Biosphere Crust & Ocean", desc: "Absorbs CO2 inside oceanic sediment basins, regulating biological carbon cycles.", pos: [0, 1.0, 0], labelOffset: [1.3, 1.1, 0.2] },
+    { name: "Viscous Silicate Mantle", desc: "Convection fields drive continental tectonic plates, locking mineral reserves downstream.", pos: [0, -0.4, 0.4], labelOffset: [-1.4, -0.7, 0.4] },
+    { name: "Geodynamo Metal Core", desc: "Churning high-voltage iron-likeness currents generate the protective Magnetosphere shields.", pos: [0, 0, -0.2], labelOffset: [1.3, -0.4, -0.6] }
+  ],
+  cell: [
+    { name: "Lipid Plasma Membrane", desc: "Semi-permeable lipid bilayer regulating nutrient-gated active transport.", pos: [0, 3.2, 0], labelOffset: [3.6, 1.4, 0.4] },
+    { name: "Double Envelope Nucleus", desc: "Encapsulates chromatin strands, managing high-fidelity transcription of mRNA files.", pos: [0, 0, 0], labelOffset: [-2.6, 0.9, 0.8] },
+    { name: "Rough Endoplasmic Reticulum", desc: "Embedded with dense ribosomal dots, translating peptide-chains for structural foldings.", pos: [0, -1.2, 1.2], labelOffset: [2.6, -1.6, 1.2] }
+  ],
+  mitochondria: [
+    { name: "Outer Boundary Envelope", desc: "Porin membrane gates matching cytoplasm metabolites with internal organelles.", pos: [0, 0.8, 0], labelOffset: [1.1, 1.0, 0.2] },
+    { name: "Inner Folded Cristae", desc: "Dense lipid folds tracking ETC membrane complexes to push ATP phosphate creations.", pos: [0, -0.3, 0.3], labelOffset: [-1.1, -0.4, 0.4] },
+    { name: "Carbon Krebs Matrix Core", desc: "Soluble metabolic enzymes conducting Tricarboxylic Acid cycle, stripping hydrogen fuels.", pos: [0, 0, -0.1], labelOffset: [1.1, -0.3, -0.4] }
+  ],
+  skeleton: [
+    { name: "Calcium Phosphate Lattice", desc: "Dense crystalline hydroxyapatite matrix providing high structural weight capacity.", pos: [0, 0.45, 0], labelOffset: [0.8, 0.6, 0.1] },
+    { name: "Triple Helix Collagen Mesh", desc: "Fibrous structural framework giving bones high tensile flexibility and break resistance.", pos: [0, -0.3, 0], labelOffset: [-0.8, -0.4, 0.15] }
+  ],
+  human: [
+    { name: "Myocardial Pacemaker", desc: "Rhythmic pace cells trigger localized high-frequency potentials driving blood transport.", pos: [0, 0.18, 0.3], labelOffset: [0.6, 0.3, 0.3] },
+    { name: "Alveolar Respiration Membrane", desc: "Gas-exchange capillary networks exchanging blood carbon dioxide for clean air-oxygen.", pos: [-0.14, 0.05, 0.1], labelOffset: [-0.6, 0.2, 0.15] },
+    { name: "Neural Cerebral Cortex", desc: "Highly dense synaptic myelinated neural cables executing sensory feedback and motor code.", pos: [0, 0.72, 0], labelOffset: [0.5, 0.8, 0.1] }
+  ]
+};
+
+export const StructuralAnnotations = ({ id }: { id: string }) => {
+  const showAnnotations = useDashboardStore(s => s.showAnnotations);
+  if (!showAnnotations) return null;
+
+  const annotations = STRUCTURAL_ANNOTATIONS[id];
+  if (!annotations) return null;
+
+  return (
+    <group>
+      {annotations.map((ann, i) => {
+        const linePoints = [[0, 0, 0] as [number, number, number], ann.labelOffset] as [number, number, number][];
+        const distanceFac = id === 'sun' ? 22 : id === 'earth' ? 5 : 0.055;
+
+        return (
+          <group key={`${id}-ann-${i}`} position={ann.pos}>
+            {/* Core concentric sensor anchor */}
+            <mesh>
+              <sphereGeometry args={[id === 'sun' ? 1.5 : id === 'earth' ? 0.04 : 0.0015, 16, 16]} />
+              <meshBasicMaterial color="#22d3ee" toneMapped={false} />
+            </mesh>
+            
+            {/* Concentric pulsing outer sonar ripple */}
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[id === 'sun' ? 1.8 : id === 'earth' ? 0.05 : 0.0018, id === 'sun' ? 2.6 : id === 'earth' ? 0.08 : 0.0028, 32]} />
+              <meshBasicMaterial color="#06b6d4" transparent opacity={0.4} side={THREE.DoubleSide} toneMapped={false} />
+            </mesh>
+            
+            {/* Technical annotation connection line */}
+            <Line 
+              points={linePoints} 
+              color="#06b6d4" 
+              lineWidth={1.2} 
+              opacity={0.4} 
+              transparent 
+            />
+
+            {/* Micro Cyberpunk HUD HTML Block overlay */}
+            <Html 
+              position={ann.labelOffset}
+              distanceFactor={distanceFac}
+              center
+              className="pointer-events-none select-none z-50 animate-in fade-in duration-300"
+            >
+              <div className="bg-[#030305]/95 border border-cyan-500/25 px-2.5 py-1.5 rounded shadow-[0_4px_24px_rgba(0,0,0,0.85)] backdrop-blur-md max-w-[170px] text-left">
+                <div className="text-[8.5px] font-mono font-black text-cyan-400 uppercase tracking-widest border-b border-cyan-500/10 pb-1 mb-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                  🎯 {ann.name}
+                </div>
+                <div className="text-[8px] leading-relaxed text-white/80 font-sans font-semibold">
+                  {ann.desc}
+                </div>
+              </div>
+            </Html>
+          </group>
+        );
+      })}
+    </group>
+  );
+};
+
+interface SpacetimeSimulationViewerProps {
+  cloudDensity?: number;
+  orbitalExcitation?: number;
+  showBohrTracks?: boolean;
+  showFieldForceLines?: boolean;
+}
+
+const SpacetimeSimulationViewer: React.FC<SpacetimeSimulationViewerProps> = ({
+  cloudDensity = 40,
+  orbitalExcitation = 1.5,
+  showBohrTracks = true,
+  showFieldForceLines = true
+}) => {
   const { simulationActive, simulationSelected } = useDashboardStore();
   const groupRef = useRef<THREE.Group>(null);
   const particleGroupRef = useRef<THREE.Group>(null);
+  const coreFlashRef1 = useRef<THREE.Mesh>(null);
+  const coreFlashRef2 = useRef<THREE.Mesh>(null);
+  
+  // High-frequency kinetic spark emitter states
+  const [ionicElectronT, setIonicElectronT] = useState(0);
 
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     if (groupRef.current) {
-      groupRef.current.rotation.y = t * 0.4;
-      groupRef.current.rotation.x = t * 0.15;
+      groupRef.current.rotation.y = t * 0.15;
+      groupRef.current.rotation.x = t * 0.05;
     }
     if (particleGroupRef.current) {
-      particleGroupRef.current.rotation.y = -t * 0.8;
+      particleGroupRef.current.rotation.y = -t * 0.3 * orbitalExcitation;
+    }
+    
+    // Animate ionic transfer packet
+    setIonicElectronT((prev) => (prev + 0.03 * orbitalExcitation) % 1.0);
+
+    // Periodic flash trigger for Fusion
+    if (coreFlashRef1.current) {
+      const flashValue = Math.max(0, Math.sin(t * 1.5 * orbitalExcitation));
+      (coreFlashRef1.current.material as THREE.MeshBasicMaterial).opacity = flashValue * 0.25;
+      coreFlashRef1.current.scale.setScalar(1.0 + flashValue * 1.2);
+    }
+    if (coreFlashRef2.current) {
+      const flashValue2 = Math.max(0, Math.sin(t * 1.5 * orbitalExcitation + Math.PI / 2));
+      (coreFlashRef2.current.material as THREE.MeshBasicMaterial).opacity = flashValue2 * 0.2;
+      coreFlashRef2.current.scale.setScalar(1.0 + flashValue2 * 1.8);
     }
   });
 
@@ -1598,248 +1729,576 @@ const SpacetimeSimulationViewer = () => {
 
   const has = (id: DashboardId) => simulationSelected.includes(id);
 
-  // Render different product views based on reaction type!
+  // Render high-fidelity reactant complexes inside the quantum chamber
   const renderProduct = () => {
     if (has('hydrogen') && has('oxygen')) {
-      // H2O
+      // H2O Covalent Overlapping Orbitals
       return (
         <group>
-          {/* Oxygen */}
-          <mesh>
-            <sphereGeometry args={[1.0, 32, 32]} />
-            <meshStandardMaterial color="#ef4444" roughness={0.3} emissive="#ef4444" emissiveIntensity={0.25} />
-          </mesh>
-          {/* Hydrogen 1 */}
-          <group position={[-1.1, -0.8, 0]}>
+          {/* Oxygen central core */}
+          <group position={[0, 0, 0]}>
             <mesh>
-              <sphereGeometry args={[0.45, 16, 16]} />
-              <meshStandardMaterial color="#f8fafc" roughness={0.4} />
+              <sphereGeometry args={[1.1, 32, 32]} />
+              <meshStandardMaterial color="#ef4444" roughness={0.2} metalness={0.1} emissive="#ef4444" emissiveIntensity={0.25} />
             </mesh>
-            <Line points={[[0, 0, 0], [1.1, 0.8, 0]]} color="#22d3ee" lineWidth={3} opacity={0.6} transparent />
+            {showBohrTracks && (
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[1.5, 0.015, 8, 64]} />
+                <meshBasicMaterial color="#ef4444" transparent opacity={0.25} />
+              </mesh>
+            )}
           </group>
-          {/* Hydrogen 2 */}
-          <group position={[1.1, -0.8, 0]}>
+
+          {/* Hydrogen core 1 */}
+          <group position={[-1.3, -0.9, 0]}>
             <mesh>
-              <sphereGeometry args={[0.45, 16, 16]} />
-              <meshStandardMaterial color="#f8fafc" roughness={0.4} />
+              <sphereGeometry args={[0.55, 16, 16]} />
+              <meshStandardMaterial color="#e2e8f0" roughness={0.3} emissive="#e2e8f0" emissiveIntensity={0.1} />
             </mesh>
-            <Line points={[[0, 0, 0], [-1.1, 0.8, 0]]} color="#22d3ee" lineWidth={3} opacity={0.6} transparent />
+            {showBohrTracks && (
+              <mesh rotation={[Math.PI / 3, Math.PI / 4, 0]}>
+                <torusGeometry args={[0.8, 0.015, 8, 32]} />
+                <meshBasicMaterial color="#e2e8f0" transparent opacity={0.25} />
+              </mesh>
+            )}
+            {/* Covalent energy bridge */}
+            {showFieldForceLines && (
+              <Line points={[[0, 0, 0], [1.3, 0.9, 0]]} color="#22d3ee" lineWidth={2} opacity={0.5} transparent />
+            )}
           </group>
-          {/* Shared Orbit Ring */}
-          <mesh rotation={[Math.PI / 4, 0, 0]}>
-            <torusGeometry args={[1.4, 0.05, 8, 32]} />
-            <meshBasicMaterial color="#22d3ee" transparent opacity={0.3} />
-          </mesh>
+
+          {/* Hydrogen core 2 */}
+          <group position={[1.3, -0.9, 0]}>
+            <mesh>
+              <sphereGeometry args={[0.55, 16, 16]} />
+              <meshStandardMaterial color="#e2e8f0" roughness={0.3} emissive="#e2e8f0" emissiveIntensity={0.1} />
+            </mesh>
+            {showBohrTracks && (
+              <mesh rotation={[Math.PI / 3, -Math.PI / 4, 0]}>
+                <torusGeometry args={[0.8, 0.015, 8, 32]} />
+                <meshBasicMaterial color="#e2e8f0" transparent opacity={0.25} />
+              </mesh>
+            )}
+            {/* Covalent energy bridge */}
+            {showFieldForceLines && (
+              <Line points={[[0, 0, 0], [-1.3, 0.9, 0]]} color="#22d3ee" lineWidth={2} opacity={0.5} transparent />
+            )}
+          </group>
+
+          {/* Soft volumetric covalent overlap probability fields */}
+          <group>
+            {/* Left shared lobe */}
+            <mesh position={[-0.65, -0.45, 0]} rotation={[0, 0, Math.atan2(-0.9, -1.3)]}>
+              <sphereGeometry args={[0.75, 16, 16]} />
+              <meshStandardMaterial color="#22d3ee" transparent opacity={0.06} side={THREE.DoubleSide} roughness={0.1} />
+            </mesh>
+            {/* Right shared lobe */}
+            <mesh position={[0.65, -0.45, 0]} rotation={[0, 0, Math.atan2(-0.9, 1.3)]}>
+              <sphereGeometry args={[0.75, 16, 16]} />
+              <meshStandardMaterial color="#22d3ee" transparent opacity={0.06} side={THREE.DoubleSide} roughness={0.1} />
+            </mesh>
+          </group>
+
+          {/* Shared Covalent figure-8 valence electron trails */}
+          {Array.from({ length: Math.round(cloudDensity / 8) }).map((_, i) => {
+            const speedFact = 1.6 * orbitalExcitation;
+            const delayOffset = (i * Math.PI * 2) / Math.round(cloudDensity / 8);
+            
+            return (
+              <group key={`h2o-el-${i}`}>
+                {/* Loop 1: Oxygen to Hydrogen 1 */}
+                <OrbitingElectron 
+                  posA={[0, 0, 0]} 
+                  posB={[-1.3, -0.9, 0]} 
+                  speed={speedFact} 
+                  delay={delayOffset} 
+                  color="#22d3ee" 
+                />
+                {/* Loop 2: Oxygen to Hydrogen 2 */}
+                <OrbitingElectron 
+                  posA={[0, 0, 0]} 
+                  posB={[1.3, -0.9, 0]} 
+                  speed={speedFact} 
+                  delay={delayOffset + Math.PI} 
+                  color="#22d3ee" 
+                />
+              </group>
+            );
+          })}
         </group>
       );
     }
 
     if (has('carbon') && has('oxygen')) {
-      // CO2
+      // CO2 Linear Covalent Overlapping Orbitals
       return (
         <group>
-          {/* Carbon */}
-          <mesh>
-            <sphereGeometry args={[0.9, 32, 32]} />
-            <meshStandardMaterial color="#374151" roughness={0.5} />
-          </mesh>
-          {/* Oxygen Left */}
-          <group position={[-1.7, 0, 0]}>
+          {/* Carbon center */}
+          <group position={[0, 0, 0]}>
             <mesh>
-              <sphereGeometry args={[0.75, 24, 24]} />
-              <meshStandardMaterial color="#ef4444" roughness={0.3} />
+              <sphereGeometry args={[1.0, 32, 32]} />
+              <meshStandardMaterial color="#4b5563" roughness={0.5} emissive="#4b5563" emissiveIntensity={0.1} />
             </mesh>
-            {/* Double bonded cylinders */}
-            <mesh position={[0.85, 0.15, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[0.04, 0.04, 1.7]} />
-              <meshBasicMaterial color="#f97316" />
+            {showBohrTracks && (
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[1.3, 0.01, 8, 32]} />
+                <meshBasicMaterial color="#9ca3af" transparent opacity={0.2} />
+              </mesh>
+            )}
+          </group>
+
+          {/* Left Oxygen */}
+          <group position={[-1.8, 0, 0]}>
+            <mesh>
+              <sphereGeometry args={[0.85, 24, 24]} />
+              <meshStandardMaterial color="#ef4444" roughness={0.3} emissive="#ef4444" emissiveIntensity={0.2} />
             </mesh>
-            <mesh position={[0.85, -0.15, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[0.04, 0.04, 1.7]} />
-              <meshBasicMaterial color="#f97316" />
+            {showBohrTracks && (
+              <mesh rotation={[Math.PI / 2, Math.PI / 4, 0]}>
+                <torusGeometry args={[1.1, 0.01, 8, 32]} />
+                <meshBasicMaterial color="#ef4444" transparent opacity={0.2} />
+              </mesh>
+            )}
+            {/* Double bonds */}
+            {showFieldForceLines && (
+              <>
+                <Line points={[[0.1, 0.15, 0], [1.7, 0.15, 0]]} color="#f97316" lineWidth={2} opacity={0.65} transparent />
+                <Line points={[[0.1, -0.15, 0], [1.7, -0.15, 0]]} color="#f97316" lineWidth={2} opacity={0.65} transparent />
+              </>
+            )}
+          </group>
+
+          {/* Right Oxygen */}
+          <group position={[1.8, 0, 0]}>
+            <mesh>
+              <sphereGeometry args={[0.85, 24, 24]} />
+              <meshStandardMaterial color="#ef4444" roughness={0.3} emissive="#ef4444" emissiveIntensity={0.2} />
+            </mesh>
+            {showBohrTracks && (
+              <mesh rotation={[Math.PI / 2, -Math.PI / 4, 0]}>
+                <torusGeometry args={[1.1, 0.01, 8, 32]} />
+                <meshBasicMaterial color="#ef4444" transparent opacity={0.2} />
+              </mesh>
+            )}
+            {/* Double bonds */}
+            {showFieldForceLines && (
+              <>
+                <Line points={[[-0.1, 0.15, 0], [-1.7, 0.15, 0]]} color="#f97316" lineWidth={2} opacity={0.65} transparent />
+                <Line points={[[-0.1, -0.15, 0], [-1.7, -0.15, 0]]} color="#f97316" lineWidth={2} opacity={0.65} transparent />
+              </>
+            )}
+          </group>
+
+          {/* Double overlapping sharing clouds */}
+          <group>
+            <mesh position={[-0.9, 0, 0]}>
+              <sphereGeometry args={[0.8, 16, 16]} />
+              <meshStandardMaterial color="#f97316" transparent opacity={0.06} side={THREE.DoubleSide} roughness={0.1} />
+            </mesh>
+            <mesh position={[0.9, 0, 0]}>
+              <sphereGeometry args={[0.8, 16, 16]} />
+              <meshStandardMaterial color="#f97316" transparent opacity={0.06} side={THREE.DoubleSide} roughness={0.1} />
             </mesh>
           </group>
-          {/* Oxygen Right */}
-          <group position={[1.7, 0, 0]}>
-            <mesh>
-              <sphereGeometry args={[0.75, 24, 24]} />
-              <meshStandardMaterial color="#ef4444" roughness={0.3} />
-            </mesh>
-            {/* Double bonded cylinders */}
-            <mesh position={[-0.85, 0.15, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[0.04, 0.04, 1.7]} />
-              <meshBasicMaterial color="#f97316" />
-            </mesh>
-            <mesh position={[-0.85, -0.15, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[0.04, 0.04, 1.7]} />
-              <meshBasicMaterial color="#f97316" />
-            </mesh>
-          </group>
+
+          {/* High density linear shared electrons */}
+          {Array.from({ length: Math.round(cloudDensity / 8) }).map((_, i) => {
+            const speedFact = 1.8 * orbitalExcitation;
+            const delayOffset = (i * Math.PI * 2) / Math.round(cloudDensity / 8);
+            
+            return (
+              <group key={`co2-el-${i}`}>
+                {/* Left side oscillator */}
+                <OrbitingElectron 
+                  posA={[0, 0, 0]} 
+                  posB={[-1.8, 0, 0]} 
+                  speed={speedFact} 
+                  delay={delayOffset} 
+                  color="#f97316" 
+                />
+                {/* Right side oscillator */}
+                <OrbitingElectron 
+                  posA={[0, 0, 0]} 
+                  posB={[1.8, 0, 0]} 
+                  speed={speedFact} 
+                  delay={delayOffset + Math.PI} 
+                  color="#f97316" 
+                />
+              </group>
+            );
+          })}
         </group>
       );
     }
 
     if (has('hydrogen') && simulationSelected.every(x => x === 'hydrogen' || x === 'helium')) {
-      // Stellar Fusion
+      // Stellar Nuclear Fusion
       return (
         <group>
+          {/* Confined ultra-dense star core */}
           <mesh>
-            <sphereGeometry args={[1.2, 32, 32]} />
-            <meshBasicMaterial color="#facc15" wireframe transparent opacity={0.3} />
+            <sphereGeometry args={[1.0, 32, 32]} />
+            <meshStandardMaterial color="#facc15" emissive="#eab308" emissiveIntensity={3.0} roughness={0.1} />
           </mesh>
-          <mesh>
-            <sphereGeometry args={[0.95, 32, 32]} />
-            <meshStandardMaterial color="#f97316" emissive="#ea580c" emissiveIntensity={2.0} roughness={0.1} />
-          </mesh>
-          {/* Solar corona ring */}
+          
+          {/* Glowing magnetic confinement loop grids */}
           <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[1.6, 0.07, 8, 48]} />
-            <meshBasicMaterial color="#ea580c" transparent opacity={0.6} />
+            <torusGeometry args={[1.7, 0.05, 8, 48]} />
+            <meshBasicMaterial color="#ef4444" transparent opacity={0.45} wireframe />
           </mesh>
           <mesh rotation={[0, Math.PI / 4, 0]}>
             <torusGeometry args={[1.9, 0.03, 8, 48]} />
-            <meshBasicMaterial color="#eab308" transparent opacity={0.4} />
+            <meshBasicMaterial color="#f59e0b" transparent opacity={0.35} wireframe />
           </mesh>
+          <mesh rotation={[0, -Math.PI / 4, 0]}>
+            <torusGeometry args={[2.1, 0.02, 8, 48]} />
+            <meshBasicMaterial color="#fb7185" transparent opacity={0.3} wireframe />
+          </mesh>
+
+          {/* Expanding periodic fusion shockwaves linked to useFrame timers */}
+          <mesh ref={coreFlashRef1}>
+            <sphereGeometry args={[1.1, 32, 32]} />
+            <meshBasicMaterial color="#fef08a" transparent opacity={0.1} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh ref={coreFlashRef2}>
+            <sphereGeometry args={[1.1, 24, 24]} />
+            <meshBasicMaterial color="#e0f2fe" transparent opacity={0.05} side={THREE.DoubleSide} />
+          </mesh>
+
+          {/* Protons spinning around collapsing orbitals */}
+          {Array.from({ length: 4 }).map((_, i) => {
+            const r = 2.8;
+            return (
+              <Float key={i} speed={4 * orbitalExcitation} rotationIntensity={0.8} floatIntensity={0.6}>
+                <mesh position={[Math.sin(i * 1.5) * r, Math.cos(i * 1.5) * r * 0.4, Math.sin(i * 2) * 0.5]}>
+                  <sphereGeometry args={[0.22, 12, 12]} />
+                  <meshBasicMaterial color="#ef4444" toneMapped={false} />
+                  {/* Glowing corona spark tail */}
+                  <mesh scale={[1.3, 1.3, 1.3]}>
+                    <sphereGeometry args={[0.22, 8, 8]} />
+                    <meshBasicMaterial color="#fb923c" transparent opacity={0.3} side={THREE.BackSide} />
+                  </mesh>
+                </mesh>
+              </Float>
+            );
+          })}
         </group>
       );
     }
 
     if (has('sodium') && has('chlorine')) {
-      // NaCl ionic crystal lattice
+      // Sodium + Chlorine Ionic Crystal Lattice Attraction
+      const ionicSpacing = 1.3;
+      const tProgress = ionicElectronT; // 0 to 1 loop
+
+      // Cubic electron transfer coordinate calc
+      const naPos: [number, number, number] = [-1.3, 0, 0];
+      const clPos: [number, number, number] = [1.3, 0, 0];
+      const electronPos: [number, number, number] = [
+        naPos[0] + (clPos[0] - naPos[0]) * tProgress,
+        Math.sin(tProgress * Math.PI) * 0.7, // Quadratic bend arc!
+        0
+      ];
+
       return (
         <group>
-          {/* Draw a tiny 3D lattice of sodium (purple) and chlorine (green) */}
-          <mesh position={[-0.8, -0.8, 0]}>
-            <sphereGeometry args={[0.45, 16, 16]} />
-            <meshStandardMaterial color="#a855f7" roughness={0.2} emissive="#a855f7" emissiveIntensity={0.2} />
+          {/* Sodium Cation (Na+) - Shrunken purple shell */}
+          <group position={naPos}>
+            <mesh>
+              <sphereGeometry args={[0.55, 24, 24]} />
+              <meshStandardMaterial color="#a855f7" roughness={0.1} emissive="#a855f7" emissiveIntensity={0.4} />
+            </mesh>
+            {showBohrTracks && (
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.8, 0.015, 8, 32]} />
+                <meshBasicMaterial color="#c084fc" transparent opacity={0.4} />
+              </mesh>
+            )}
+            {/* Element state text label */}
+            <Html position={[0, -0.9, 0]} center>
+              <div className="text-[7.5px] font-mono bg-purple-950/70 border border-purple-500/20 px-1 py-0.5 rounded text-purple-300">Na⁺ (Cation)</div>
+            </Html>
+          </group>
+
+          {/* Chlorine Anion (Cl-) - Expanded green shell */}
+          <group position={clPos}>
+            <mesh>
+              <sphereGeometry args={[0.92, 24, 24]} />
+              <meshStandardMaterial color="#22c55e" roughness={0.2} emissive="#10b981" emissiveIntensity={0.35} />
+            </mesh>
+            {/* Highly packed outermost valence shell */}
+            <mesh>
+              <sphereGeometry args={[1.05, 12, 12]} />
+              <meshBasicMaterial color="#22c55e" wireframe transparent opacity={Math.max(0.05, Math.sin(tProgress * Math.PI * 2) * 0.15)} />
+            </mesh>
+            {showBohrTracks && (
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[1.2, 0.012, 8, 32]} />
+                <meshBasicMaterial color="#6ee7b7" transparent opacity={0.3} />
+              </mesh>
+            )}
+            {/* Element state text label */}
+            <Html position={[0, -1.2, 0]} center>
+              <div className="text-[7.5px] font-mono bg-emerald-950/70 border border-emerald-500/20 px-1 py-0.5 rounded text-emerald-300">Cl⁻ (Anion)</div>
+            </Html>
+          </group>
+
+          {/* Electrostatic potential bond vector */}
+          {showFieldForceLines && (
+            <Line points={[naPos, clPos]} color="#fbbf24" lineWidth={1.5} opacity={0.5} transparent />
+          )}
+
+          {/* Valence electron being actively transferred */}
+          <mesh position={electronPos}>
+            <sphereGeometry args={[0.075, 8, 8]} />
+            <meshBasicMaterial color="#facc15" toneMapped={false} />
+            {/* Glow halo */}
+            <mesh scale={[2.0, 2.0, 2.0]}>
+              <sphereGeometry args={[0.075, 8, 8]} />
+              <meshBasicMaterial color="#fbbf24" transparent opacity={0.4} side={THREE.BackSide} />
+            </mesh>
           </mesh>
-          <mesh position={[0.8, -0.8, 0]}>
-            <sphereGeometry args={[0.7, 16, 16]} />
-            <meshStandardMaterial color="#22c55e" roughness={0.2} emissive="#22c55e" emissiveIntensity={0.2} />
-          </mesh>
-          <mesh position={[-0.8, 0.8, 0]}>
-            <sphereGeometry args={[0.7, 16, 16]} />
-            <meshStandardMaterial color="#22c55e" roughness={0.2} emissive="#22c55e" emissiveIntensity={0.2} />
-          </mesh>
-          <mesh position={[0.8, 0.8, 0]}>
-            <sphereGeometry args={[0.45, 16, 16]} />
-            <meshStandardMaterial color="#a855f7" roughness={0.2} emissive="#a855f7" emissiveIntensity={0.2} />
-          </mesh>
-          {/* Connectors */}
-          <Line points={[[-0.8, -0.8, 0], [0.8, -0.8, 0]]} color="#e9d5ff" lineWidth={2} />
-          <Line points={[[-0.8, 0.8, 0], [0.8, 0.8, 0]]} color="#e9d5ff" lineWidth={2} />
-          <Line points={[[-0.8, -0.8, 0], [-0.8, 0.8, 0]]} color="#e9d5ff" lineWidth={2} />
-          <Line points={[[0.8, -0.8, 0], [0.8, 0.8, 0]]} color="#e9d5ff" lineWidth={2} />
+
+          {/* Particle ring sparkles when electron lands on Chlorine */}
+          {tProgress > 0.85 && (
+            <group position={clPos}>
+              {Array.from({ length: 6 }).map((_, sparkIdx) => {
+                const angle = (sparkIdx / 6) * Math.PI * 2;
+                const sparkDist = 1.0 + (tProgress - 0.85) * 3;
+                return (
+                  <mesh key={sparkIdx} position={[Math.cos(angle) * sparkDist, Math.sin(angle) * sparkDist, 0]}>
+                    <sphereGeometry args={[0.03, 4, 4]} />
+                    <meshBasicMaterial color="#fbbf24" transparent opacity={1.0 - (tProgress - 0.85) * 6} />
+                  </mesh>
+                );
+              })}
+            </group>
+          )}
         </group>
       );
     }
 
     if (has('earth') && has('moon')) {
-      // Gravitational barycentric orbit
+      // Celestial Barycentre and Spacetime Gravity Field Wrap
       return (
         <group>
-          {/* Tiny Earth */}
-          <mesh position={[-1.2, 0, 0]}>
-            <sphereGeometry args={[0.7, 24, 24]} />
-            <meshStandardMaterial color="#3b82f6" roughness={0.4} />
-          </mesh>
-          {/* Tiny Moon */}
-          <mesh position={[1.8, 0, 0]}>
-            <sphereGeometry args={[0.22, 16, 16]} />
-            <meshStandardMaterial color="#9ca3af" roughness={0.8} />
-          </mesh>
-          {/* Connective force line and orbit trail */}
-          <Line points={[[-1.2, 0, 0], [1.8, 0, 0]]} color="#22d3ee" lineWidth={2} opacity={0.6} transparent />
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[1.5, 0.02, 8, 64]} />
-            <meshBasicMaterial color="#ec4899" transparent opacity={0.2} />
-          </mesh>
+          {/* Gravitational space-time warp grid below them */}
+          <group position={[0, -1.4, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <gridHelper args={[12, 16, '#22d3ee', '#1e293b']} scale={[1, 1, 1]} />
+          </group>
+
+          {/* Earth */}
+          <group position={[-1.7, 0, 0]}>
+            <mesh>
+              <sphereGeometry args={[0.75, 24, 24]} />
+              <meshStandardMaterial color="#3b82f6" roughness={0.3} metalness={0.1} />
+            </mesh>
+            <Html position={[0, -1.0, 0]} center>
+              <div className="text-[7px] font-mono bg-blue-950/55 px-1 rounded text-blue-300">EARTH</div>
+            </Html>
+          </group>
+
+          {/* Dynamic Barycentric flux line */}
+          {showFieldForceLines && (
+            <Line points={[[-1.7, 0, 0], [2.1, 0, 0]]} color="#ec4899" lineWidth={1.8} opacity={0.7} transparent />
+          )}
+
+          {/* Moon orbiting barycenter */}
+          <group position={[2.1, 0, 0]}>
+            <mesh>
+              <sphereGeometry args={[0.26, 16, 16]} />
+              <meshStandardMaterial color="#9ca3af" roughness={0.9} />
+            </mesh>
+            <Html position={[0, -0.6, 0]} center>
+              <div className="text-[7px] font-mono bg-neutral-900/55 px-1 rounded text-neutral-300">MOON</div>
+            </Html>
+          </group>
         </group>
       );
     }
 
     if (has('cell') && has('mitochondria')) {
-      // Cell Endosymbiosis
+      // Cell Endosymbiosis & Molecular Metabalic Channeling
       return (
         <group>
-          {/* Eukaryotic Cell boundary - big glassy capsule */}
+          {/* Glassy Eukaryotic Cell membrane boundary */}
           <mesh>
-            <sphereGeometry args={[1.8, 32, 32]} />
-            <meshStandardMaterial color="#10b981" transparent opacity={0.2} roughness={0.1} metalness={0.1} side={THREE.DoubleSide} />
+            <sphereGeometry args={[2.0, 32, 32]} />
+            <meshStandardMaterial color="#10b981" transparent opacity={0.14} roughness={0.05} metalness={0.1} side={THREE.DoubleSide} />
           </mesh>
           <mesh>
-            <sphereGeometry args={[1.8, 32, 32]} />
-            <meshBasicMaterial color="#34d399" wireframe transparent opacity={0.1} />
+            <sphereGeometry args={[2.0, 32, 32]} />
+            <meshBasicMaterial color="#34d399" wireframe transparent opacity={0.05} />
           </mesh>
-          {/* Host Nucleus */}
-          <mesh position={[-0.5, 0, 0]}>
-            <sphereGeometry args={[0.5, 16, 16]} />
-            <meshStandardMaterial color="#6366f1" roughness={0.3} />
-          </mesh>
-          {/* Bacterial Mitochondrion nested inside */}
-          <mesh position={[0.6, 0.4, 0]} rotation={[0, 0, Math.PI / 4]}>
-            <cylinderGeometry args={[0.22, 0.22, 0.6, 16]} />
-            <meshStandardMaterial color="#ea580c" roughness={0.4} emissive="#f97316" emissiveIntensity={0.3} />
-          </mesh>
+
+          {/* Parent Host Cell Nucleus */}
+          <group position={[-0.7, 0.2, 0.4]}>
+            <mesh>
+              <sphereGeometry args={[0.55, 16, 16]} />
+              <meshStandardMaterial color="#6366f1" roughness={0.4} emissive="#4338ca" emissiveIntensity={0.1} />
+            </mesh>
+          </group>
+
+          {/* Symbiotic Mitochondria charging ATP channel vectors */}
+          <group position={[0.6, -0.3, -0.2]} rotation={[0, 0, Math.PI / 4]}>
+            <mesh>
+              <cylinderGeometry args={[0.3, 0.3, 0.9, 16]} />
+              <meshStandardMaterial color="#ea580c" roughness={0.3} emissive="#f97316" emissiveIntensity={0.3} />
+            </mesh>
+            <mesh position={[0, 0.45, 0]}>
+              <sphereGeometry args={[0.3, 16, 12]} />
+              <meshStandardMaterial color="#ea580c" roughness={0.3} emissive="#f97316" emissiveIntensity={0.3} />
+            </mesh>
+            <mesh position={[0, -0.45, 0]}>
+              <sphereGeometry args={[0.3, 16, 12]} />
+              <meshStandardMaterial color="#ea580c" roughness={0.3} emissive="#f97316" emissiveIntensity={0.3} />
+            </mesh>
+          </group>
+
+          {/* ATP energy phosphate spheres flowing out of Mitochondria in real-time */}
+          {Array.from({ length: 5 }).map((_, flowIdx) => {
+            const flowProgress = (ionicElectronT + flowIdx / 5) % 1.0;
+            const startPos: [number, number, number] = [0.6, -0.3, -0.2];
+            const endPos: [number, number, number] = [-0.7, 0.2, 0.4]; // Nucleus / cytoplasm receiver
+            const x = startPos[0] + (endPos[0] - startPos[0]) * flowProgress;
+            const y = startPos[1] + (endPos[1] - startPos[1]) * flowProgress + Math.sin(flowProgress * Math.PI) * 0.4;
+            const z = startPos[2] + (endPos[2] - startPos[2]) * flowProgress;
+
+            return (
+              <mesh key={`atp-${flowIdx}`} position={[x, y, z]}>
+                <sphereGeometry args={[0.08, 8, 8]} />
+                <meshBasicMaterial color="#34d399" toneMapped={false} />
+                <Html position={[0, -0.35, 0]} center>
+                  <span className="text-[6.5px] font-mono text-emerald-400 font-bold tracking-widest scale-75 block">ATP</span>
+                </Html>
+              </mesh>
+            );
+          })}
         </group>
       );
     }
 
-    // Generic response molecule cluster
+    // Default general Molecular connector
     return (
       <group>
-        <mesh position={[-0.8, 0, 0]}>
-          <sphereGeometry args={[0.8, 24, 24]} />
-          <meshStandardMaterial color="#a855f7" roughness={0.4} />
+        <mesh position={[-1.0, 0, 0]}>
+          <sphereGeometry args={[0.85, 24, 24]} />
+          <meshStandardMaterial color="#a855f7" roughness={0.3} emissive="#a855f7" emissiveIntensity={0.15} />
         </mesh>
-        <mesh position={[0.8, 0, 0]}>
-          <sphereGeometry args={[0.8, 24, 24]} />
-          <meshStandardMaterial color="#ec4899" roughness={0.4} />
+        <mesh position={[1.0, 0, 0]}>
+          <sphereGeometry args={[0.85, 24, 24]} />
+          <meshStandardMaterial color="#ec4899" roughness={0.3} emissive="#ec4899" emissiveIntensity={0.15} />
         </mesh>
-        <Line points={[[-0.8, 0, 0], [0.8, 0, 0]]} color="#ffffff" lineWidth={3} opacity={0.7} transparent />
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[1.3, 0.04, 8, 32]} />
-          <meshBasicMaterial color="#a855f7" transparent opacity={0.4} />
-        </mesh>
+        {showFieldForceLines && (
+          <Line points={[[-1.0, 0, 0], [1.0, 0, 0]]} color="#ffffff" lineWidth={2} opacity={0.6} transparent />
+        )}
+        {showBohrTracks && (
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[1.5, 0.02, 8, 32]} />
+            <meshBasicMaterial color="#c084fc" transparent opacity={0.3} />
+          </mesh>
+        )}
       </group>
     );
   };
 
   return (
     <group ref={groupRef}>
-      {/* Visual background energetic aura */}
-      <mesh>
-        <sphereGeometry args={[4.5, 32, 32]} />
-        <meshBasicMaterial color="#0c101e" transparent opacity={0.85} side={THREE.DoubleSide} />
+      {/* Visual background vacuum cylinder container (Physic Chamber Bounding) */}
+      <mesh position={[0, 0, 0]} rotation={[0, 0, 0]}>
+        <cylinderGeometry args={[3.8, 3.8, 7.8, 32, 1, true]} />
+        <meshStandardMaterial 
+          color="#06b6d4" 
+          wireframe 
+          transparent 
+          opacity={0.06} 
+          side={THREE.DoubleSide} 
+        />
       </mesh>
       
-      {/* Glow aura wireframe */}
-      <mesh>
-        <sphereGeometry args={[3.2, 16, 16]} />
-        <meshBasicMaterial color="#a855f7" wireframe transparent opacity={0.1} />
+      {/* Chamber structural containment locking seals */}
+      <mesh position={[0, 3.9, 0]}>
+        <torusGeometry args={[3.8, 0.08, 16, 64]} />
+        <meshStandardMaterial color="#334155" metalness={0.9} roughness={0.1} />
+      </mesh>
+      <mesh position={[0, -3.9, 0]}>
+        <torusGeometry args={[3.8, 0.08, 16, 64]} />
+        <meshStandardMaterial color="#334155" metalness={0.9} roughness={0.1} />
       </mesh>
 
-      {/* Render the specific reactive model product */}
+      {/* Volumetric atmosphere sphere inside the chamber */}
+      <mesh>
+        <sphereGeometry args={[3.5, 32, 32]} />
+        <meshBasicMaterial color="#05050e" transparent opacity={0.75} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Render the core physical reaction setup inside the containment seals */}
       {renderProduct()}
 
-      {/* Embedded orbiting reaction sparkles */}
+      {/* High-frequency quantum probability background cloud particle arrays */}
       <group ref={particleGroupRef}>
-        {[...Array(24)].map((_, i) => {
-          const theta = (i / 24) * Math.PI * 2;
-          const phi = Math.sin(i * 1.7) * Math.PI / 4;
-          const r = 2.4 + Math.sin(i * 0.9) * 0.4;
+        {Array.from({ length: Math.round(cloudDensity * 0.8) }).map((_, i) => {
+          const theta = (i / Math.round(cloudDensity * 0.8)) * Math.PI * 2;
+          const phi = Math.sin(i * 1.6) * Math.PI / 4;
+          const r = 2.0 + Math.sin(i * 0.8) * 0.5;
           const x = r * Math.cos(theta) * Math.cos(phi);
           const y = r * Math.sin(phi);
           const z = r * Math.sin(theta) * Math.cos(phi);
+          
           return (
             <mesh key={i} position={[x, y, z]}>
-              <sphereGeometry args={[0.04, 8, 8]} />
-              <meshBasicMaterial color={i % 2 === 0 ? "#22d3ee" : "#ec4899"} />
+              <sphereGeometry args={[0.035, 6, 6]} />
+              <meshBasicMaterial 
+                color={i % 2 === 0 ? "#22d3ee" : "#a855f7"} 
+                transparent 
+                opacity={0.55}
+                toneMapped={false}
+              />
             </mesh>
           );
         })}
       </group>
     </group>
+  );
+};
+
+// Covalent back-and-forth electron vector simulator
+const OrbitingElectron = ({ 
+  posA, 
+  posB, 
+  speed, 
+  delay, 
+  color 
+}: { 
+  posA: [number, number, number]; 
+  posB: [number, number, number]; 
+  speed: number; 
+  delay: number; 
+  color: string; 
+}) => {
+  const ref = useRef<THREE.Mesh>(null);
+  
+  useFrame(({ clock }) => {
+    if (ref.current) {
+      const t = clock.getElapsedTime() * speed + delay;
+      // Smooth sinusoidal interpolation demonstrating true electron wave sharing back and forth!
+      const factor = (Math.sin(t) + 1.0) / 2.0; 
+      
+      ref.current.position.x = posA[0] * (1.0 - factor) + posB[0] * factor;
+      ref.current.position.y = posA[1] * (1.0 - factor) + posB[1] * factor + Math.sin(t * 2.0) * 0.15; // little wave wobble
+      ref.current.position.z = posA[2] * (1.0 - factor) + posB[2] * factor;
+    }
+  });
+
+  return (
+    <mesh ref={ref}>
+      <sphereGeometry args={[0.05, 8, 8]} />
+      <meshBasicMaterial color={color} toneMapped={false} />
+      <mesh scale={[2, 2, 2]}>
+        <sphereGeometry args={[0.05, 6, 6]} />
+        <meshBasicMaterial color={color} transparent opacity={0.3} side={THREE.BackSide} />
+      </mesh>
+    </mesh>
   );
 };
 
@@ -1856,8 +2315,180 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
     toggleSimulationSelected, 
     simulationActive, 
     setSimulationActive, 
-    clearSimulation 
+    clearSimulation,
+    activeReaction
   } = useDashboardStore();
+
+  const [collisionSpeedPct, setCollisionSpeedPct] = useState<number>(50);
+  const [cloudDensity, setCloudDensity] = useState<number>(40);
+  const [orbitalExcitation, setOrbitalExcitation] = useState<number>(1.5);
+  const [showBohrTracks, setShowBohrTracks] = useState<boolean>(true);
+  const [showFieldForceLines, setShowFieldForceLines] = useState<boolean>(true);
+
+  // Parse theoretical energy text from formatted string e.g. "-285.8 kJ/mol (Highly Exothermic)"
+  const parseTheoreticalEnergyText = (energyStr: string) => {
+    if (!energyStr) return { value: 0, unit: 'kJ/mol', isExothermic: true };
+    const clean = energyStr.toLowerCase();
+    const numMatch = energyStr.match(/-?[\d.]+(?:e\d+)?/);
+    const val = numMatch ? parseFloat(numMatch[0]) : 0;
+    
+    let unit = 'kJ/mol';
+    if (clean.includes('mev')) {
+      unit = 'MeV';
+    } else if (clean.includes('joule') || clean.includes('j ')) {
+      unit = 'Joules';
+    } else if (clean.includes('atp')) {
+      unit = 'ATP';
+    }
+    
+    return {
+      value: Math.abs(val),
+      unit,
+      isExothermic: clean.includes('exothermic') || clean.includes('release') || clean.includes('surplus') || clean.includes('salt') || clean.includes('yield')
+    };
+  };
+
+  const findAtomicMassAndNumber = (name: string) => {
+    const clean = name.toLowerCase().trim();
+    const matched = ELEMENTS.find(e => 
+      clean.includes(e.name.toLowerCase()) || 
+      clean.includes(e.symbol.toLowerCase())
+    );
+    if (matched) {
+      return { mass: matched.mass, symbol: matched.symbol, protons: matched.atomicNumber, name: matched.name };
+    }
+    // Specific search fallbacks
+    if (clean.includes('hydrogen') || clean.includes('deuterium') || clean === 'h' || clean.includes('protons') || clean.includes('proton')) {
+      return { mass: 1.008, symbol: 'H', protons: 1, name: 'Hydrogen' };
+    }
+    if (clean.includes('helium') || clean === 'he') {
+      return { mass: 4.0026, symbol: 'He', protons: 2, name: 'Helium' };
+    }
+    if (clean.includes('oxygen') || clean === 'o') {
+      return { mass: 15.999, symbol: 'O', protons: 8, name: 'Oxygen' };
+    }
+    if (clean.includes('carbon') || clean === 'c') {
+      return { mass: 12.011, symbol: 'C', protons: 6, name: 'Carbon' };
+    }
+    if (clean.includes('nitrogen') || clean === 'n') {
+      return { mass: 14.007, symbol: 'N', protons: 7, name: 'Nitrogen' };
+    }
+    if (clean.includes('sodium') || clean === 'na') {
+      return { mass: 22.99, symbol: 'Na', protons: 11, name: 'Sodium' };
+    }
+    if (clean.includes('chlorine') || clean === 'cl') {
+      return { mass: 35.45, symbol: 'Cl', protons: 17, name: 'Chlorine' };
+    }
+    if (clean.includes('calcium') || clean === 'ca') {
+      return { mass: 40.078, symbol: 'Ca', protons: 20, name: 'Calcium' };
+    }
+    if (clean.includes('potassium') || clean === 'k') {
+      return { mass: 39.098, symbol: 'K', protons: 19, name: 'Potassium' };
+    }
+    if (clean.includes('magnesium') || clean === 'mg') {
+      return { mass: 24.305, symbol: 'Mg', protons: 12, name: 'Magnesium' };
+    }
+    if (clean.includes('silicon') || clean === 'si') {
+      return { mass: 28.085, symbol: 'Si', protons: 14, name: 'Silicon' };
+    }
+    if (clean.includes('phosphorus') || clean === 'p') {
+      return { mass: 30.974, symbol: 'P', protons: 15, name: 'Phosphorus' };
+    }
+    if (clean.includes('sulfur') || clean === 's') {
+      return { mass: 32.06, symbol: 'S', protons: 16, name: 'Sulfur' };
+    }
+    if (clean.includes('iron') || clean === 'fe') {
+      return { mass: 55.845, symbol: 'Fe', protons: 26, name: 'Iron' };
+    }
+    if (clean.includes('copper') || clean === 'cu') {
+      return { mass: 63.546, symbol: 'Cu', protons: 29, name: 'Copper' };
+    }
+    if (clean.includes('zinc') || clean === 'zn') {
+      return { mass: 65.38, symbol: 'Zn', protons: 30, name: 'Zinc' };
+    }
+    if (clean.includes('mucin') || clean.includes('mucus') || clean.includes('glycoprotein')) {
+      return { mass: 250.0, symbol: 'MUC', protons: 0, name: 'Mucin Glycoprotein' };
+    }
+    if (clean.includes('transpeptidase')) {
+      return { mass: 45000, symbol: 'PBP', protons: 0, name: 'Transpeptidase enzyme' };
+    }
+    if (clean.includes('cellulase') || clean.includes('ligninase')) {
+      return { mass: 52000, symbol: 'Enz', protons: 0, name: 'Exo-Cellulase' };
+    }
+    if (clean.includes('chitin')) {
+      return { mass: 203.19, symbol: 'Chitin', protons: 0, name: 'Chitin Monomer' };
+    }
+    
+    // Non-element fallbacks
+    if (clean.includes('cell') || clean.includes('membrane')) {
+      return { mass: 1e-12, symbol: 'Cell', protons: 0, name: 'Eukaryotic Cell' };
+    }
+    if (clean.includes('mitochondria') || clean.includes('organelle')) {
+      return { mass: 1e-15, symbol: 'Mito', protons: 0, name: 'Mitochondria' };
+    }
+    if (clean.includes('earth')) {
+      return { mass: 5.972e24, symbol: 'Earth', protons: 0, name: 'Earth' };
+    }
+    if (clean.includes('moon')) {
+      return { mass: 7.342e22, symbol: 'Moon', protons: 0, name: 'Moon' };
+    }
+    if (clean.includes('sun')) {
+      return { mass: 1.989e30, symbol: 'Sun', protons: 0, name: 'Sun' };
+    }
+
+    return { mass: 12.0, symbol: 'Mol', protons: 6, name: name };
+  };
+
+  const getComponentReactantDetail = (id: DashboardId) => {
+    const clean = id.toLowerCase().trim();
+    const matched = ELEMENTS.find(e => e.name.toLowerCase() === clean || e.symbol.toLowerCase() === clean);
+    if (matched) {
+      return { mass: matched.mass, symbol: matched.symbol, protons: matched.atomicNumber, name: matched.name, type: 'element' };
+    }
+    
+    switch (clean) {
+      case 'hydrogen': return { mass: 1.008, symbol: 'H', protons: 1, name: 'Hydrogen', type: 'element' };
+      case 'helium': return { mass: 4.0026, symbol: 'He', protons: 2, name: 'Helium', type: 'element' };
+      case 'sodium': return { mass: 22.990, symbol: 'Na', protons: 11, name: 'Sodium', type: 'element' };
+      case 'chlorine': return { mass: 35.450, symbol: 'Cl', protons: 17, name: 'Chlorine', type: 'element' };
+      case 'carbon': return { mass: 12.011, symbol: 'C', protons: 6, name: 'Carbon', type: 'element' };
+      case 'oxygen': return { mass: 15.999, symbol: 'O', protons: 8, name: 'Oxygen', type: 'element' };
+      case 'earth': return { mass: 5.972e24, symbol: '♁', protons: 0, name: 'Earth', type: 'celestial' };
+      case 'moon': return { mass: 7.342e22, symbol: '☾', protons: 0, name: 'Moon', type: 'celestial' };
+      case 'sun': return { mass: 1.989e30, symbol: '☉', protons: 0, name: 'Sun', type: 'celestial' };
+      case 'cell': return { mass: 1.0e-12, symbol: '🧫', protons: 0, name: 'Eukaryotic Cell', type: 'biological' };
+      case 'mitochondria': return { mass: 1.0e-15, symbol: '🔋', protons: 0, name: 'Mitochondria', type: 'biological' };
+      case 'skeleton': return { mass: 12.0, symbol: '☠', protons: 20, name: 'Bone Tissue', type: 'physiological' };
+      case 'human': return { mass: 70.0, symbol: '🧍', protons: 6, name: 'Human Body', type: 'biological' };
+      default: return { mass: 12.0, symbol: 'Mol', protons: 6, name: id.charAt(0).toUpperCase() + id.slice(1), type: 'unknown' };
+    }
+  };
+
+  const getReactionReactants = (rx: any, selected: DashboardId[]) => {
+    if (rx && rx.atoms && rx.atoms.length > 0) {
+      return rx.atoms.map((a: any) => {
+        const details = findAtomicMassAndNumber(a.name);
+        return {
+          name: a.name,
+          symbol: details.symbol,
+          mass: details.mass,
+          protons: details.protons,
+          specs: a.specs
+        };
+      });
+    }
+    
+    return selected.map(id => {
+      const d = getComponentReactantDetail(id);
+      return {
+        name: d.name,
+        symbol: d.symbol,
+        mass: d.mass,
+        protons: d.protons,
+        specs: `Z:${d.protons}`
+      };
+    });
+  };
 
   const labels: Record<DashboardId, { title: string }> = {
     sun: { title: 'Sun' },
@@ -1961,8 +2592,93 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
 
           {simulationActive && (() => {
             const details = getReactionDetails(simulationSelected);
+            
+            // Get atomic mass specifications representing reactants
+            const reactantsList = getReactionReactants(activeReaction, simulationSelected);
+            
+            // 1. Calculate total reactant mass
+            const hasCelestial = reactantsList.some(r => r.mass > 1e10);
+            const totalMassVal = reactantsList.reduce((sum, r) => sum + r.mass, 0);
+            const totalMassStr = hasCelestial
+              ? `${totalMassVal.toExponential(3)} kg`
+              : `${totalMassVal.toFixed(4)} amu`;
+
+            // 2. Calculate reduced mass (mu) of colliding particles
+            let reducedMass = 0;
+            if (reactantsList.length > 0) {
+              const masses = reactantsList.map(r => r.mass);
+              if (masses.length === 1) {
+                reducedMass = masses[0];
+              } else if (masses.length === 2) {
+                reducedMass = (masses[0] * masses[1]) / (masses[0] + masses[1]);
+              } else {
+                // Generalized reduced mass for three bodies
+                const denom = (masses[0] * masses[1]) + (masses[1] * masses[2]) + (masses[2] * masses[0]);
+                reducedMass = denom > 0 ? (masses[0] * masses[1] * masses[2]) / denom : 0;
+              }
+            }
+            const reducedMassStr = hasCelestial 
+              ? `${reducedMass.toExponential(3)} kg`
+              : `${reducedMass.toFixed(4)} amu`;
+
+            // 3. Collision speed calculations
+            const isNuclear = details.type === 'nuclear';
+            
+            // Speed definitions (nuclear works as speed of light fractions, chemical/other works as thermal km/s speeds)
+            const speedVal = isNuclear 
+              ? (0.01 + (collisionSpeedPct / 100) * 0.19) 
+              : (1.0 + (collisionSpeedPct / 100) * 39.0);
+            const formattedSpeed = isNuclear
+              ? `${speedVal.toFixed(3)}c`
+              : `${speedVal.toFixed(1)} km/s`;
+
+            // Calculate kinetic energy in appropriate physics scale
+            let E_kin = 0;
+            let E_kin_str = "";
+            if (isNuclear) {
+              // E_kin = 0.5 * mu * beta^2 * 931.494 MeV
+              E_kin = 0.5 * reducedMass * (speedVal * speedVal) * 931.494;
+              E_kin_str = `${E_kin.toFixed(3)} MeV`;
+            } else {
+              // E_kin = 0.5 * reducedMass_amu * v^2 in kJ/mol
+              E_kin = 0.5 * (hasCelestial ? 12.0 : reducedMass) * (speedVal * speedVal); 
+              E_kin_str = `${E_kin.toLocaleString(undefined, { maximumFractionDigits: 1 })} kJ/mol`;
+            }
+
+            // 4. Parse theoretical chemical/nuclear bond yield
+            const theory = parseTheoreticalEnergyText(details.energy);
+            
+            // Total yield balance (Theoretical reaction energy + Collision kinetic boost)
+            let totalReleaseVal = 0;
+            let combinedEnergyStr = '';
+            if (isNuclear) {
+              totalReleaseVal = theory.value + E_kin;
+              combinedEnergyStr = `${totalReleaseVal.toFixed(3)} MeV`;
+            } else {
+              totalReleaseVal = theory.value + E_kin;
+              combinedEnergyStr = `${totalReleaseVal.toLocaleString(undefined, { maximumFractionDigits: 1 })} kJ/mol`;
+            }
+
+            // Calculate mass converted (Einstein equivalence deficit: dm = E/c^2)
+            let massDefectStr = "";
+            if (isNuclear) {
+              const convertedMass = totalReleaseVal * 0.00107354; // to amu
+              massDefectStr = `${convertedMass.toExponential(4)} amu`;
+            } else {
+              const convertedMassG = totalReleaseVal * 1.11265e-14; // grams equivalent
+              massDefectStr = `${convertedMassG.toExponential(4)} g/mol`;
+            }
+
+            // Electrostatic/Coulomb repelling threshold evaluation
+            const chemicalIgnitionThreshold = 150.0; // kJ/mol
+            const nuclearIgnitionThreshold = 1.2; // MeV
+            const isCriticalIgnition = isNuclear 
+              ? E_kin > nuclearIgnitionThreshold 
+              : E_kin > chemicalIgnitionThreshold;
+
             return (
-              <div className="border-t border-white/5 pt-3.5 mt-1 space-y-3 font-mono text-[11px] animate-fade-in">
+              <div className="border-t border-white/5 pt-3 mt-1 space-y-3 font-mono text-[11px] animate-fade-in">
+                {/* Product spec block */}
                 <div className="bg-black/40 border border-[#a855f7]/10 p-2.5 rounded text-[10px] font-mono leading-relaxed space-y-2">
                   <div className="text-purple-400 font-bold border-b border-white/5 pb-1 flex items-center justify-between text-[11px]">
                     <span className="truncate pr-1">{details.title}</span>
@@ -1976,32 +2692,143 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
                   </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[8.5px] font-mono text-white/30 uppercase tracking-widest">Active Scale Telemetry</label>
+                {/* Reactants Mass Spec Sheet */}
+                <div className="space-y-1">
+                  <span className="text-[8px] text-purple-300/60 uppercase tracking-widest font-bold">Reactant Mass Spec Sheets</span>
+                  <div className="grid grid-cols-1 gap-1">
+                    {reactantsList.map((r, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-black/60 border border-white/5 px-2 py-1 rounded text-[9.5px]">
+                        <span className="text-white/80 font-semibold flex items-center gap-1.5 shrink-0">
+                          <span className="py-0.5 px-1 bg-purple-950 text-purple-300 text-[8px] rounded border border-purple-800/20 font-mono tracking-widest font-black uppercase text-center min-w-[20px]">{r.symbol}</span>
+                          <span className="truncate max-w-[130px] inline-block">{r.name}</span>
+                        </span>
+                        <span className="text-[9px] text-cyan-400 font-mono text-right">{r.mass > 1e10 ? `${r.mass.toExponential(2)} kg` : `${r.mass.toFixed(4)} amu`}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Collision Accelerator Controls */}
+                <div className="bg-black/40 border border-white/5 p-2 rounded space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[8.5px] text-pink-400 font-bold uppercase tracking-wider">Ion velocity accelerator</span>
+                    <span className="text-[10px] text-cyan-300 font-bold font-mono bg-cyan-950/40 border border-cyan-800/30 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(34,211,238,0.1)]">{formattedSpeed}</span>
+                  </div>
+                  <input 
+                    type="range"
+                    min="1"
+                    max="100"
+                    value={collisionSpeedPct}
+                    onChange={(e) => setCollisionSpeedPct(parseInt(e.target.value))}
+                    className="w-full h-1 bg-neutral-800 accent-purple-400 rounded-lg cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[7.5px] text-white/30 px-0.5 select-none uppercase">
+                    <span>{isNuclear ? '0.01c (Thermal)' : '1.0 km/s'}</span>
+                    <span>{isNuclear ? '0.10c (Warm core)' : '20 km/s'}</span>
+                    <span>{isNuclear ? '0.20c (Relativistic)' : '40 km/s'}</span>
+                  </div>
+                </div>
+
+                {/* Advanced Quantum Cloud Customizer */}
+                <div className="bg-black/40 border border-[#a855f7]/10 p-2.5 rounded space-y-3 font-mono">
+                  <div className="text-[8.5px] text-cyan-400 font-bold uppercase tracking-wider">Advanced Quantum Cloud Tuning</div>
+                  
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[9px]">
+                      <span className="text-white/40">Electron prob. density:</span>
+                      <span className="text-cyan-300 font-bold">{cloudDensity} particles</span>
+                    </div>
+                    <input 
+                      type="range"
+                      min="10"
+                      max="120"
+                      step="5"
+                      value={cloudDensity}
+                      onChange={(e) => setCloudDensity(parseInt(e.target.value))}
+                      className="w-full h-1 bg-neutral-800 accent-cyan-400 rounded-lg cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[9px]">
+                      <span className="text-white/40">Valence flux speed:</span>
+                      <span className="text-cyan-300 font-bold">{orbitalExcitation.toFixed(1)}x (excitation)</span>
+                    </div>
+                    <input 
+                      type="range"
+                      min="0.5"
+                      max="4.0"
+                      step="0.1"
+                      value={orbitalExcitation}
+                      onChange={(e) => setOrbitalExcitation(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-neutral-800 accent-cyan-400 rounded-lg cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[9px] text-white/60 hover:text-white transition-colors">
+                      <input 
+                        type="checkbox"
+                        checked={showBohrTracks}
+                        onChange={(e) => setShowBohrTracks(e.target.checked)}
+                        className="rounded bg-black border-white/10 text-cyan-500 focus:ring-0 cursor-pointer"
+                      />
+                      <span>Bohr Energy Nodes</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[9px] text-white/60 hover:text-white transition-colors">
+                      <input 
+                        type="checkbox"
+                        checked={showFieldForceLines}
+                        onChange={(e) => setShowFieldForceLines(e.target.checked)}
+                        className="rounded bg-black border-white/10 text-cyan-500 focus:ring-0 cursor-pointer"
+                      />
+                      <span>Covalent Vectors</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Physical Telemetry Calculations */}
+                <div className="space-y-1">
+                  <label className="text-[8.5px] font-mono text-white/30 uppercase tracking-widest">Active Collision Telemetry</label>
                   <div className="space-y-1.5 bg-[#040406] border border-white/5 p-2 rounded">
-                    <div>
-                      <div className="flex justify-between text-[8px] text-white/40 mb-0.5">
-                        <span>VALENCE BOND OVERLAP</span>
-                        <span className="text-cyan-400 font-bold">98.4%</span>
+                    <div className="flex justify-between text-[9px] border-b border-white/5 pb-1 text-white/50">
+                      <span>TOTAL INPUT MASS (M_in):</span>
+                      <span className="text-cyan-400 font-bold">{totalMassStr}</span>
+                    </div>
+                    <div className="flex justify-between text-[9px] border-b border-white/5 pb-1 text-white/50">
+                      <span>REDUCED MASS (inertia μ):</span>
+                      <span className="text-purple-300 font-bold">{reducedMassStr}</span>
+                    </div>
+                    <div className="flex justify-between text-[9px] border-b border-white/5 pb-1 text-white/50">
+                      <span>IGNITION KINETIC BOOST (E_kin):</span>
+                      <span className="text-amber-400 font-bold">{E_kin_str}</span>
+                    </div>
+                    {theory.value > 0 && (
+                      <div className="flex justify-between text-[9px] border-b border-white/5 pb-1 text-white/50">
+                        <span>THEORETICAL BOND RELEASE (ΔE_rx):</span>
+                        <span className="text-green-400 font-bold">{theory.isExothermic ? '+' : '-'}{theory.value.toFixed(1)} {theory.unit}</span>
                       </div>
-                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-cyan-400 rounded-full" style={{ width: '98.4%' }}></div>
-                      </div>
+                    )}
+                    <div className="pt-0.5 flex justify-between text-[9px] text-white/50">
+                      <span>EINSTEINIAN MASS DEFECT (Δm):</span>
+                      <span className="text-pink-400 font-bold font-mono">{massDefectStr}</span>
                     </div>
 
-                    <div>
-                      <div className="flex justify-between text-[8px] text-white/40 mb-0.5">
-                        <span>SIMULATION ENERGY</span>
-                        <span className="text-amber-400 font-bold">{details.energy.split(' (')[0]}</span>
+                    <div className="pt-1.5 border-t border-purple-500/20 flex flex-col gap-1.5 justify-center">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-white/60 uppercase">COMBINED CORE RELEASE:</span>
+                        <span className="text-purple-300 font-black text-[11.5px] font-mono tracking-wide">{combinedEnergyStr}</span>
                       </div>
-                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-amber-400 rounded-full" style={{ width: '76%' }}></div>
-                      </div>
-                    </div>
 
-                    <div className="pt-1 flex items-center justify-between text-[8.5px] text-white/50 font-mono">
-                      <span>PRODUCT ENERGY:</span>
-                      <span className="text-purple-300 font-bold">{details.energy}</span>
+                      <div className={`p-1 text-center font-bold text-[7.5px] font-mono border rounded uppercase leading-normal tracking-wide ${
+                        isCriticalIgnition 
+                          ? 'bg-emerald-950/50 border-emerald-500/30 text-emerald-300 animate-pulse'
+                          : 'bg-amber-950/40 border-amber-500/20 text-amber-300'
+                      }`}>
+                        {isCriticalIgnition 
+                          ? '🟢 CRITICAL COLLISION IGNITION REACHED (SUPERCRITICAL)' 
+                          : '🟡 STEADY THERMAL COLLISION COMPLETED (SUBCRITICAL)'}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2108,7 +2935,12 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
         <Stars radius={100} depth={50} count={3500} factor={4} saturation={0.2} fade speed={1.2} />
 
         {/* Custom Simulation Viewer */}
-        <SpacetimeSimulationViewer />
+        <SpacetimeSimulationViewer 
+          cloudDensity={cloudDensity}
+          orbitalExcitation={orbitalExcitation}
+          showBohrTracks={showBohrTracks}
+          showFieldForceLines={showFieldForceLines}
+        />
 
         {/* Scene Objects */}
         <SpacetimeSun />

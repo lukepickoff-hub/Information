@@ -1,6 +1,38 @@
 import { useState, useMemo } from 'react';
 import { Search, Sparkles, ChevronDown, ChevronUp, Zap, HelpCircle } from 'lucide-react';
 import { REACTION_DOMAINS, ReactionDomain, ReactionItem } from '../data/reactionData';
+import { useDashboardStore } from '../store/useDashboardStore';
+import { DASHBOARD_DATA } from '../data/dashboardData';
+
+const rxInvolvesObject = (rx: ReactionItem, objId: string): boolean => {
+  const normObj = objId.toLowerCase();
+  
+  if (normObj === 'mitochondria') {
+    return rx.id.startsWith('cell_pdh') || rx.id.includes('krebs') || rx.id.includes('etc') || rx.id.includes('beta_oxid');
+  }
+  if (normObj === 'cell') {
+    return rx.id.startsWith('cell');
+  }
+  if (normObj === 'sun') {
+    return rx.id.startsWith('star');
+  }
+  if (['earth', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'moon'].includes(normObj)) {
+    return rx.id.startsWith('planet');
+  }
+  if (normObj === 'skeleton') {
+    return rx.id.startsWith('tissue') || rx.id.includes('osteoclast') || rx.id.includes('collagen') || rx.id.includes('apatite');
+  }
+  if (normObj === 'human') {
+    return rx.id.startsWith('organ') || rx.id.startsWith('animal') || rx.id.startsWith('tissue');
+  }
+  
+  return rx.atoms.some(a => {
+    const aName = a.name.toLowerCase();
+    return aName.includes(normObj) || 
+           (normObj.length === 1 && aName.includes(` ${normObj.toUpperCase()}`)) || 
+           (normObj.length === 2 && aName.includes(` ${normObj.charAt(0).toUpperCase()}${normObj.charAt(1).toLowerCase()}`));
+  }) || rx.equation.toLowerCase().includes(normObj);
+};
 
 interface ReactionCatalogProps {
   onAskAI: (question: string) => void;
@@ -11,6 +43,16 @@ export function ReactionCatalog({ onAskAI, onTriggerReactionInChamber }: Reactio
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDomainId, setSelectedDomainId] = useState<string>('all');
   const [expandedReactionIds, setExpandedReactionIds] = useState<Set<string>>(new Set());
+
+  const activeDashboardId = useDashboardStore(s => s.activeDashboardId);
+  const activeObj = useMemo(() => DASHBOARD_DATA[activeDashboardId], [activeDashboardId]);
+
+  // Find reactions specifically happening inside this active object
+  const activeObjectReactions = useMemo(() => {
+    if (!activeDashboardId) return [];
+    const all = REACTION_DOMAINS.flatMap(d => d.reactions.map(r => ({ ...r, domain: d })));
+    return all.filter(rx => rxInvolvesObject(rx, activeDashboardId));
+  }, [activeDashboardId]);
 
   // Toggle reaction card expand/collapse
   const toggleReaction = (id: string) => {
@@ -167,6 +209,125 @@ export function ReactionCatalog({ onAskAI, onTriggerReactionInChamber }: Reactio
 
       {/* Main Scollable Reactions Deck */}
       <div id="reactions-deck" className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-5">
+        
+        {/* RECOMMENDED REACTIONS WITHIN ACTIVE OBJECT TARGET */}
+        {activeObjectReactions.length > 0 && searchQuery.trim() === '' && selectedDomainId === 'all' && (
+          <div className="space-y-2 border border-purple-500/20 bg-purple-950/5 p-3 rounded shadow-lg animate-in fade-in duration-300">
+            <div className="flex items-center justify-between pb-1.5 border-b border-purple-500/10 mb-2">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <h4 className="text-[10px] font-mono font-black tracking-wider text-purple-200 uppercase">
+                  Reactions in {activeObj?.name || activeDashboardId}
+                </h4>
+              </div>
+              <span className="text-[7.5px] font-mono px-1.5 py-0.5 rounded bg-purple-950 border border-purple-500/30 text-purple-300 font-bold uppercase">
+                {activeObjectReactions.length} ACTIVE
+              </span>
+            </div>
+            <p className="text-[8.5px] text-white/40 leading-relaxed font-sans mb-3">
+              The following molecular & physical energy reactions take place inside or involve the structures of this active target object:
+            </p>
+            
+            <div className="space-y-1.5">
+              {activeObjectReactions.map(rx => {
+                const isExpanded = expandedReactionIds.has(rx.id + '-rec');
+                const labelStyle = getDomainLabelStyle(rx.domain.id);
+                
+                return (
+                  <div 
+                    key={rx.id + '-rec'}
+                    className={`border rounded transition-all duration-300 ${
+                      isExpanded 
+                        ? 'bg-[#08080f]/90 border-purple-500/30 shadow-[0_4px_16px_rgba(168,85,247,0.15)]' 
+                        : 'bg-[#040406]/20 border-purple-950/50 hover:border-purple-800/40 hover:bg-purple-950/10'
+                    }`}
+                  >
+                    <div 
+                      onClick={() => toggleReaction(rx.id + '-rec')}
+                      className="p-2.5 flex items-center justify-between cursor-pointer select-none gap-3"
+                    >
+                      <div className="space-y-0.5 min-w-0 flex-1">
+                        <span className="text-[7px] font-mono font-bold uppercase tracking-wider text-purple-400/80 block">
+                          🧩 {rx.subCategory}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold tracking-tight text-white/90 block">
+                          {rx.name}
+                        </span>
+                        <span className="text-[9.5px] text-purple-300/95 font-mono font-semibold block truncate select-all">
+                          {rx.equation}
+                        </span>
+                      </div>
+                      <ChevronDown className={`w-3.5 h-3.5 text-purple-400/60 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                    </div>
+
+                    {isExpanded && (
+                      <div className="px-2.5 pb-2.5 pt-2 border-t border-purple-950/40 space-y-3 font-mono text-[9.5px] leading-relaxed text-white/80">
+                        {/* Equation Box */}
+                        <div className="bg-black/95 border border-purple-500/10 p-2.5 rounded text-center">
+                          <span className="text-[7px] text-white/30 uppercase tracking-widest block font-bold">Involved Quantum Formula</span>
+                          <div className="text-purple-300 font-mono text-[10.5px] font-bold tracking-widest select-all">
+                            {rx.equation}
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        <div>
+                          <span className="text-[7px] text-white/30 uppercase tracking-widest block font-bold">Empirical Description</span>
+                          <p className="text-white/70 font-sans text-[9.5px] leading-relaxed mt-0.5">
+                            {rx.description}
+                          </p>
+                        </div>
+
+                        {/* Specs Chips */}
+                        {rx.atoms.length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-[7px] text-white/30 uppercase tracking-widest block font-bold">Reacting Components</span>
+                            <div className="flex flex-wrap gap-1">
+                              {rx.atoms.map((atom, aIdx) => (
+                                <div 
+                                  key={`${rx.id}-rec-atom-${aIdx}`}
+                                  className={`px-1.5 py-0.5 rounded text-[8px] font-mono border flex items-center gap-1 select-none ${labelStyle}`}
+                                >
+                                  <span className="font-bold">{atom.name}</span>
+                                  <span className="opacity-40">|</span>
+                                  <span className="text-[7px] tracking-wide text-white/50">{atom.specs}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Action buttons */}
+                        <div className="flex gap-1.5 pt-1 select-none">
+                          <button
+                            onClick={() => {
+                              const prompt = `Tell me more about how the reaction "${rx.name}" (${rx.equation}) operates at scale within the domain: ${rx.domain.title}. Specifically, what are the energetic transformations, thermodynamic catalysts, and scientific importances?`;
+                              onAskAI(prompt);
+                            }}
+                            className="flex-1 py-1 rounded bg-purple-950/25 border border-purple-500/25 hover:bg-purple-950/40 text-purple-300 font-mono text-[8.5px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer hover:shadow-[0_0_12px_rgba(168,85,247,0.15)]"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-purple-400" /> Consult AI
+                          </button>
+
+                          {onTriggerReactionInChamber && (
+                            <button
+                              onClick={() => onTriggerReactionInChamber(rx)}
+                              className="px-2 py-1 rounded bg-emerald-950/30 border border-emerald-500/35 hover:bg-emerald-950/50 text-emerald-300 font-mono text-[8.5px] uppercase transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <Zap className="w-3 h-3 text-amber-400 animate-pulse" /> Trigger Chamber
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="w-full h-[1px] bg-purple-500/15 my-2" />
+          </div>
+        )}
+
         {filteredDomains.length === 0 ? (
           <div className="py-20 text-center border border-dashed border-white/5 rounded-lg bg-black/20">
             <HelpCircle className="w-8 h-8 text-white/20 mx-auto mb-2" />

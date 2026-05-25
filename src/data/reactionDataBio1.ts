@@ -585,6 +585,101 @@ export const CELL_DOMAIN: ReactionDomain = {
         { name: 'GSH peptide', specs: 'Reducing buffer' }
       ],
       description: 'GSH donates electrons to neutralize peroxides, powered indirectly by the pentose-phosphate pathway.'
+    },
+    // ── PROKARYOTIC CELL SPECIFIC PROCESSES ──
+    {
+      id: 'cell_pro_peptidoglycan',
+      subCategory: 'Prokaryotic Cell Processes',
+      name: 'Peptidoglycan cross-linking',
+      equation: 'D-Ala-D-Ala + L-Lys-peptide → D-Ala + peptide cross-bridge  (via transpeptidase)',
+      atoms: [
+        { name: 'Peptidoglycan (NAG+NAM)', specs: 'Polymer' },
+        { name: 'D-Alanine residue', specs: 'Leaving group' }
+      ],
+      description: 'The biochemical basis of bacterial wall stiffness. Penicillin inhibits this transpeptidase reaction, making cells lyse under high osmotic pressure.'
+    },
+    {
+      id: 'cell_pro_binary_fission',
+      subCategory: 'Prokaryotic Cell Processes',
+      name: 'Binary fission (septation assembly)',
+      equation: '1 Mother Cell → FtsZ Ring constriction → 2 Genetically identical cells',
+      atoms: [
+        { name: 'FtsZ tubulin homolog', specs: 'GTPase constriction wheel' }
+      ],
+      description: 'Direct cellular division without mitotic spindle. The FtsZ ring recruits wall synthases to deposit a central septum division plane.'
+    },
+    // ── EUKARYOTIC CELL DIGESTIVE PROCESSES ──
+    {
+      id: 'cell_lysosome_digestion',
+      subCategory: 'Eukaryotic Cell Processes — Animal',
+      name: 'Lysosomal Macromolecule Digestion',
+      equation: 'Protein + H₂O → Amino acids  (via acid hydrolase, pH 4.5)',
+      atoms: [
+        { name: 'Hydrogen ion H⁺', specs: 'pH 4.5 inside' }
+      ],
+      description: 'Acid proteases, nucleases, and lipases operate optimally at low pH maintained by vacuolar proton ATP-consuming pumps.'
+    },
+    // ── FUNGI CELL SPECIFIC PROCESSES ──
+    {
+      id: 'cell_fungi_chitin',
+      subCategory: 'Fungi Cell Processes',
+      name: 'Chitin biosynthesis',
+      equation: 'UDP-GlcNAc + Chitin(n) → Chitin(n+1) + UDP  (via chitin synthase)',
+      atoms: [
+        { name: 'GlcNAc (N-Acetylglucosamine)', specs: 'Nitrogen-containing hexose' }
+      ],
+      description: 'Synthesis of the fungal cell wall polymer chitin. Uses nucleotide sugars to build long beta-1,4-linked structural fibers.'
+    },
+    {
+      id: 'cell_fungi_cellulose_dig',
+      subCategory: 'Fungi Cell Processes',
+      name: 'Extracellular cellulose digestion',
+      equation: '[C₆H₁₀O₅]ₙ (cellulose) + H₂O → [C₆H₁₀O₅]ₙ₋₁ + Glucose  (via secreted cellulase)',
+      atoms: [
+        { name: 'Cellulase enzymes', specs: 'Endo/Exoglucanase cocktail' }
+      ],
+      description: 'Fungi secrete external enzymes to break down tough plant cellulose fibers into simple, absorbable sugars.'
+    },
+    {
+      id: 'cell_fungi_lignin_deg',
+      subCategory: 'Fungi Cell Processes',
+      name: 'Lignin degradation',
+      equation: 'Lignin + O₂ + H₂O₂ → Aromatic fragments + CO₂ + H₂O  (via lignin peroxidase)',
+      atoms: [
+        { name: 'H₂O₂ co-substrate', specs: 'Electron sink' }
+      ],
+      description: 'Highly oxidative degradation of woody tissue by white rot fungi. Initiated by radical-generating peroxidases.'
+    },
+    // ── PROTISTA CELL SPECIFIC PROCESSES ──
+    {
+      id: 'cell_protist_silica',
+      subCategory: 'Protista Cell Processes',
+      name: 'Diatom frustule silicification',
+      equation: 'n Si(OH)₄ (silicic acid) → [SiO₂]ₙ (diatom glass shell) + 2n H₂O',
+      atoms: [
+        { name: 'Silicon dioxide', specs: 'SiO₂ amorphous glass' }
+      ],
+      description: 'Diatoms concentrate silicic acid from sea water and deposit solid, beautiful glassy skeletons with nanometer-precise porous geometries.'
+    },
+    {
+      id: 'cell_protist_phagocytosis',
+      subCategory: 'Protista Cell Processes',
+      name: 'Amoebic Phagocytosis (intracellular digestion)',
+      equation: 'Prey cell + Actin-driven pseudopodia → Phagosome + Lysosome → Nutrient Absorption',
+      atoms: [
+        { name: 'Actin filament network', specs: 'Invasive cell sweep' }
+      ],
+      description: 'Amoeba cells engulf bacteria or organic debris inside a membrane-bound bubble that merges with acidic digestive chambers.'
+    },
+    {
+      id: 'cell_protist_malaria_heme',
+      subCategory: 'Protista Cell Processes',
+      name: 'Hemoglobin digestion (Plasmodium food vacuole)',
+      equation: 'Hemoglobin → Globin peptides + Heme (re-crystallized to Hemozoin)',
+      atoms: [
+        { name: 'Hemozoin crystals', specs: 'Fe²⁺ inert storage' }
+      ],
+      description: 'Invasive malaria plasmodium digests cell oxygen-carrier proteins inside a food vacuole. Toxic free heme is locked into inert Hemozoin crystals to prevent cell poisoning.'
     }
   ]
 };
@@ -831,6 +926,27 @@ export const TISSUE_DOMAIN: ReactionDomain = {
         { name: 'Suberin polymer', specs: 'Inorganic filter' }
       ],
       description: 'Deposits thick hydrophobic rings on endodermal lines to force ion solutions to pass membrane checks.'
+    },
+    {
+      id: 'tissue_stomata_open',
+      subCategory: 'Plant Tissue — Dermal (Barrier Chemistry)',
+      name: 'Stomatal opening (light & K⁺ signal)',
+      equation: 'H⁺-ATPase activation + H⁺ pump out → K⁺ influx (KAT1 channels) + H₂O follow via osmosis → Guard cells swell',
+      atoms: [
+        { name: 'Potassium ion K⁺', specs: 'Osmotic driver' }
+      ],
+      description: 'High light signals activate proton pumping. The resulting electrical gradient pulls Potassium ions into guard cells, causing water to surge in and twist the thick-walled inner pores open.'
+    },
+    {
+      id: 'tissue_stomata_close',
+      subCategory: 'Plant Tissue — Dermal (Barrier Chemistry)',
+      name: 'Stomatal closing (ABA drought signal)',
+      equation: 'ABA → calcium release → anion channels open → K⁺ efflux + H₂O osmosis exit → Guard cells flaccid',
+      atoms: [
+        { name: 'Abscisic Acid (ABA)', specs: 'Stress phytohormone' },
+        { name: 'Calcium Ca²⁺', specs: 'Intracellular switch' }
+      ],
+      description: 'Under water stress, roots produce Abscisic Acid (ABA) that binds guard cell receptors, releasing internal Calcium, triggering ion outflows that deflate the pores instantly.'
     }
   ]
 };

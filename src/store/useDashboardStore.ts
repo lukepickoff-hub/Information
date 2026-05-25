@@ -9,6 +9,9 @@ interface DashboardState {
   simulationMode: boolean;     // Whether simulation setup/run mode is enabled
   simulationSelected: DashboardId[]; // Objects chosen for reaction together
   simulationActive: boolean;   // Whether the simulator is running/active in the UI
+  activeReaction: any | null;  // Stored reaction from catalog
+  showAnnotations: boolean;
+  setShowAnnotations: (show: boolean) => void;
   setDashboardId: (id: DashboardId) => void;
   setTimelineStep: (step: number) => void;
   setInteractMode: (mode: boolean) => void;
@@ -16,6 +19,7 @@ interface DashboardState {
   toggleSimulationSelected: (id: DashboardId) => void;
   setSimulationActive: (active: boolean) => void;
   clearSimulation: () => void;
+  setActiveReaction: (rx: any | null) => void;
 }
 
 export const useDashboardStore = create<DashboardState>((set) => ({
@@ -25,12 +29,15 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   simulationMode: false,
   simulationSelected: [],
   simulationActive: false,
+  activeReaction: null,
+  showAnnotations: true,
+  setShowAnnotations: (show) => set({ showAnnotations: show }),
   setDashboardId: (id) => set({ activeDashboardId: id, activeTimelineStep: 1 }), // default to birth on object swap
   setTimelineStep: (step) => set({ activeTimelineStep: step }),
   setInteractMode: (mode) => set({ interactMode: mode }),
   setSimulationMode: (enabled) => set((state) => {
     if (!enabled) {
-      return { simulationMode: false, simulationActive: false, simulationSelected: [], interactMode: false };
+      return { simulationMode: false, simulationActive: false, simulationSelected: [], interactMode: false, activeReaction: null };
     }
     return { simulationMode: true, interactMode: true };
   }),
@@ -48,5 +55,6 @@ export const useDashboardStore = create<DashboardState>((set) => ({
     return { simulationSelected: newSelected };
   }),
   setSimulationActive: (active) => set({ simulationActive: active }),
-  clearSimulation: () => set({ simulationSelected: [], simulationActive: false })
+  clearSimulation: () => set({ simulationSelected: [], simulationActive: false, activeReaction: null }),
+  setActiveReaction: (rx) => set({ activeReaction: rx })
 }));

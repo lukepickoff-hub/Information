@@ -2,7 +2,7 @@ export interface Organism {
   name: string;
   sub: string;
   emoji: string;
-  cat: 'Plant' | 'Marine Plant' | 'Fungi' | 'Mammal' | 'Bird' | 'Reptile' | 'Marine Animal' | 'Insect' | 'Amphibian' | 'Mollusk';
+  cat: 'Plant' | 'Marine Plant' | 'Fungi' | 'Mammal' | 'Bird' | 'Reptile' | 'Marine Animal' | 'Insect' | 'Amphibian' | 'Mollusk' | 'Prokaryote' | 'Protista';
   env: string;
   cell: string;
 }
@@ -361,5 +361,29 @@ export const ORGANISMS_DATA: Organism[] = [
     name: "蜗牛", sub: "Snail", emoji: "🐌", cat: "Mollusk",
     env: "Moist, terrestrial or freshwater environments — under leaves, in gardens, near water. Moves slowly and has no ability to flee predators quickly.",
     cell: "The shell is secreted by the mantle — specialized epithelial cells called conchiolin cells that deposit calcium carbonate in a spiral matrix. The shell grows from the outside edge, adding new layers continuously. The foot is a single large muscular cell-mass with coordinated ciliary cells underneath — producing mucus via mucous gland cells that lubricates movement and allows climbing vertical glass. The mucus is also predator-deterrent."
+  },
+  
+  // ── PROKARYOTES ──
+  {
+    name: "大肠杆菌", sub: "Escherichia coli", emoji: "🦠", cat: "Prokaryote",
+    env: "Lives inside mammalian intestines or soil water. Faces warm temperatures, varying oxygen levels, and nutrient turbulence.",
+    cell: "A model prokaryote. Standard pill-shaped bacterial wrapper with peptidoglycan walls cross-linked by transpeptidase enzymes. DNA floats freely as a single circular chromosome in the nucleoid. Uses 70S ribosomes. Lacks mitochondria; instead, respiratory enzymes sit inside the plasma membrane."
+  },
+  {
+    name: "产甲烷菌", sub: "Methanogen (Archaea)", emoji: "🌋", cat: "Prokaryote",
+    env: "Extreme anaerobic environments like hydrothermal vents, deep mud, or animal rumens. Lacks oxygen.",
+    cell: "Archaea domain. Outer shell has pseudopeptidoglycan walls, chemically distinct from bacteria. Cell membrane lipids use ether bonds instead of ester bonds to withstand extreme heat and acid. Energy is produced via methanogenesis: fixing CO₂ and H₂ into methane greenhouse gases."
+  },
+
+  // ── PROTISTA ──
+  {
+    name: "硅藻", sub: "Diatom", emoji: "💎", cat: "Protista",
+    env: "Floating in sunlit surface ocean layers globally. Needs light and dissolved silica to build shells.",
+    cell: "Single-celled eukaryotic algae. Builds a glass-like shell (frustule) out of hydrated silicon dioxide (SiO₂·nH₂O) with nanoscale pores for gas exchange. Produces up to 25% of Earth's oxygen via active chloroplast divisions. Diatoms are primary oceanic food foundations."
+  },
+  {
+    name: "草履虫", sub: "Paramecium", emoji: "🧬", cat: "Protista",
+    env: "Freshwater ponds with organic debris. Must swim to find food and prevent bursting from taking in fresh water.",
+    cell: "Slipper-shaped ciliate. Thousands of microscopic cilia beat in waves for rapid swimming. Possesses a macronucleus (regulates cell metabolism) and a micronucleus (for conjugation sexual mating). Contains contractile vacuoles that pump out water to survive low-osmosis freshwater swells."
   }
 ];

@@ -222,6 +222,82 @@ export const ORGAN_DOMAIN: ReactionDomain = {
         { name: 'Chlorine channel', specs: 'TMEM16A driver' }
       ],
       description: 'Evaporation removes body heat. Sweat ducts use ENaC channels to reclaim valuable sodium salts before exit.'
+    },
+    // ── SKELETAL SYSTEM SPECIFIC PHYSIOLOGICAL CHEMESTRY ──
+    {
+      id: 'organ_osteoclast_dissolution',
+      subCategory: 'Skeletal System Reactions',
+      name: 'Osteoclast Bone Resorption (acid dissolution)',
+      equation: 'CO₂ + H₂O ⇌ H₂CO₃ ⇌ HCO₃⁻ + H⁺  (via Carbonic Anhydrase II)\nH⁺(cytosol) + ATP → H⁺(resorption pit) via V-proton pump → Ca₅(PO₄)₃OH (HA) + 8H⁺ → 5Ca²⁺ + 3H₂PO₄⁻ + H₂O',
+      atoms: [
+        { name: 'Calcium Ca²⁺', specs: 'Dissolved bone mineral' },
+        { name: 'Zinc cofactor', specs: 'Carbonic anhydrase center' }
+      ],
+      description: 'Osteoclasts build an airtight seal over bone and pump protons (H⁺) until the local pH reaches ~4.5, dissolving the solid calcium hydroxyapatite mineral matrix.'
+    },
+    {
+      id: 'organ_collagen_lox',
+      subCategory: 'Skeletal System Reactions',
+      name: 'Collagen Lysyl Oxidase Cross-linking',
+      equation: 'Lysin residues + O₂ → Allysine + NH₃  via lysyl oxidase (Cu²⁺-dependent)\nAllysine + Lysine → Pyridinoline covalent bond (structural lock)',
+      atoms: [
+        { name: 'Copper Cu²⁺', specs: 'Lysyl oxidase metallic center' }
+      ],
+      description: 'Copper-catalyzed amino acid alignment bridges neighboring collagen fibers. This reaction creates the high tensile-strength organic mesh of bones and tendons.'
+    },
+    // ── MUSCULAR SYSTEM ATP DYNAMIC CHEMESTRY ──
+    {
+      id: 'organ_muscle_anaerobic',
+      subCategory: 'Muscular System Reactions',
+      name: 'Anaerobic threshold ATP generation',
+      equation: 'Glucose + 2 ADP + 2 Pi → 2 Lactate + 2 ATP (net) + 2 H⁺  (without oxygen)',
+      atoms: [
+        { name: 'Lactate molecule', specs: 'C₃H₅O₃⁻ glycolytic byproduct' }
+      ],
+      description: 'Provides rapid chemical energy during explosive actions (under 2 minutes). Re-oxidizes NADH to NAD⁺ by converting pyruvate to lactate.'
+    },
+    {
+      id: 'organ_muscle_aerobic_yield',
+      subCategory: 'Muscular System Reactions',
+      name: 'Aerobic cellular respiration maximum yield',
+      equation: 'C₆H₁₂O₆ + 6 O₂ + 30-32 ADP + 30-32 Pi → 6 CO₂ + 6 H₂O + 30-32 ATP',
+      atoms: [
+        { name: 'Oxygen O₂', specs: 'Terminal electron sink' }
+      ],
+      description: 'Slow-twitch muscle fibers oxidize glucose completely using oxygen. Delivers 15-fold more ATP per glucose than anaerobic pathways, maintaining long endurance bounds.'
+    },
+    // ── REPRODUCTIVE SYSTEM DUAL CHEMESTRY ──
+    {
+      id: 'organ_steroidogenesis',
+      subCategory: 'Reproductive System Reactions',
+      name: 'Steroidogenesis (Hormone synthesis from cholesterol)',
+      equation: 'Cholesterol + CYP11A1 (mitochondria) → Pregnenolone → Progesterone → Androstenedione → Testosterone → Estradiol  (via CYP19A1 aromatase)',
+      atoms: [
+        { name: 'Cholesterol', specs: 'C₂₇H₄₆O steroid skeleton' },
+        { name: 'Iron active center', specs: 'Cytochrome P450 enzymes' }
+      ],
+      description: 'Conversion from cholesterol into progestogens, androgens, and estrogens. Cytochrome P450 monooxygenases split molecular bonds with iron cofactors.'
+    },
+    {
+      id: 'organ_acrosome_fertilization',
+      subCategory: 'Reproductive System Reactions',
+      name: 'Acrosome Reaction (egg penetration)',
+      equation: 'Sperm + egg ZP3 glycoprotein → Ca²⁺ ion influx → Acrosomal membrane fusion + Acrosin release',
+      atoms: [
+        { name: 'Acrosin', specs: 'Serine protease enzyme' }
+      ],
+      description: 'Sperm contact with egg coat triggers calcium influx, causing acrosomal bags to empty proteolytic enzymes, digesting a path through the egg outer layer.'
+    },
+    // ── INTEGUMENTARY SYSTEM REACTION ──
+    {
+      id: 'organ_melanin_synthesis',
+      subCategory: 'Integumentary System Reactions',
+      name: 'Melanin ultraviolet shield synthesis',
+      equation: 'L-Tyrosine + O₂ → L-DOPA → Dopaquinone  via tyrosinase (Cu²⁺-dependent) → Eumelanin (brown/black polymer) or Pheomelanin (red/yellow)',
+      atoms: [
+        { name: 'Copper Cu²⁺', specs: 'Tyrosinase active center' }
+      ],
+      description: 'Melanocytes in skin convert Tyrosine using oxygen and copper-centered tyrosinase to synthesize chemical polymer shields that absorb ultraviolet radiation.'
     }
   ]
 };
