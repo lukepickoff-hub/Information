@@ -11,7 +11,9 @@ interface DashboardState {
   simulationActive: boolean;   // Whether the simulator is running/active in the UI
   activeReaction: any | null;  // Stored reaction from catalog
   showAnnotations: boolean;
+  quantumView: boolean;
   setShowAnnotations: (show: boolean) => void;
+  setQuantumView: (val: boolean) => void;
   setDashboardId: (id: DashboardId) => void;
   setTimelineStep: (step: number) => void;
   setInteractMode: (mode: boolean) => void;
@@ -31,7 +33,9 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   simulationActive: false,
   activeReaction: null,
   showAnnotations: true,
+  quantumView: true,
   setShowAnnotations: (show) => set({ showAnnotations: show }),
+  setQuantumView: (val) => set({ quantumView: val }),
   setDashboardId: (id) => set({ activeDashboardId: id, activeTimelineStep: 1 }), // default to birth on object swap
   setTimelineStep: (step) => set({ activeTimelineStep: step }),
   setInteractMode: (mode) => set({ interactMode: mode }),

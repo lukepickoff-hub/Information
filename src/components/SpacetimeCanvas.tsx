@@ -291,6 +291,9 @@ const OrbitalMechanics = () => {
       // Skeletal structure (represented on Earth's surface offset boundary)
       OBJECT_COORDS.skeleton = [ex + 2.0, 0, ez];
 
+      // Human Body structure (clamped near the biological cluster)
+      OBJECT_COORDS.human = [ex + 2.0, -0.2, ez + 1.2];
+
       // Cell
       OBJECT_COORDS.cell = [ex + 2.0, 1.2, ez];
 
@@ -588,8 +591,390 @@ const ElectronTrack = ({ shellRadius, speed, color, offset }: { shellRadius: num
   );
 };
 
-const SpacetimeAtom = ({ id, atomicNumber }: { id: DashboardId, atomicNumber: number }) => {
+interface OrbitalConfiguration {
+  shell: number;
+  subshell: 's' | 'p' | 'd';
+  count: number;
+  axis?: 'x' | 'y' | 'z' | 'xy' | 'yz' | 'zx' | 'x2-y2' | 'z2';
+}
+
+const getOrbitalConfig = (Z: number): OrbitalConfiguration[] => {
+  const configs: OrbitalConfiguration[] = [];
+  let remaining = Z;
+
+  // 1s shell (max 2)
+  const e1s = Math.min(2, remaining);
+  if (e1s > 0) {
+    configs.push({ shell: 1, subshell: 's', count: e1s });
+    remaining -= e1s;
+  }
+
+  // 2s shell (max 2)
+  const e2s = Math.min(2, remaining);
+  if (e2s > 0) {
+    configs.push({ shell: 2, subshell: 's', count: e2s });
+    remaining -= e2s;
+  }
+
+  // 2p shell (max 6)
+  const e2p = Math.min(6, remaining);
+  if (e2p > 0) {
+    const axes: ('x' | 'y' | 'z')[] = ['x', 'y', 'z'];
+    const counts = [0, 0, 0];
+    for (let i = 0; i < e2p; i++) {
+      counts[i % 3]++;
+    }
+    axes.forEach((axis, idx) => {
+      if (counts[idx] > 0) {
+        configs.push({ shell: 2, subshell: 'p', count: counts[idx], axis });
+      }
+    });
+    remaining -= e2p;
+  }
+
+  // 3s shell (max 2)
+  const e3s = Math.min(2, remaining);
+  if (e3s > 0) {
+    configs.push({ shell: 3, subshell: 's', count: e3s });
+    remaining -= e3s;
+  }
+
+  // 3p shell (max 6)
+  const e3p = Math.min(6, remaining);
+  if (e3p > 0) {
+    const axes: ('x' | 'y' | 'z')[] = ['x', 'y', 'z'];
+    const counts = [0, 0, 0];
+    for (let i = 0; i < e3p; i++) {
+      counts[i % 3]++;
+    }
+    axes.forEach((axis, idx) => {
+      if (counts[idx] > 0) {
+        configs.push({ shell: 3, subshell: 'p', count: counts[idx], axis });
+      }
+    });
+    remaining -= e3p;
+  }
+
+  // 4s and 3d shells (Transition region elements up to Zn=30)
+  if (Z >= 19) {
+    let e4s = 0;
+    let e3d = 0;
+
+    if (Z === 19) {
+      e4s = 1; e3d = 0;
+    } else if (Z === 20) {
+      e4s = 2; e3d = 0;
+    } else if (Z === 24) { // Chromium Exception
+      e4s = 1; e3d = 5;
+    } else if (Z === 29) { // Copper Exception
+      e4s = 1; e3d = 10;
+    } else {
+      e4s = 2;
+      e3d = Z - 20;
+    }
+
+    if (e4s > 0) {
+      configs.push({ shell: 4, subshell: 's', count: e4s });
+    }
+
+    if (e3d > 0) {
+      const axes: ('xy' | 'yz' | 'zx' | 'x2-y2' | 'z2')[] = ['xy', 'yz', 'zx', 'x2-y2', 'z2'];
+      const counts = [0, 0, 0, 0, 0];
+      for (let i = 0; i < e3d; i++) {
+        counts[i % 5]++;
+      }
+      axes.forEach((axis, idx) => {
+        if (counts[idx] > 0) {
+          configs.push({ shell: 3, subshell: 'd', count: counts[idx], axis });
+        }
+      });
+    }
+  }
+
+  return configs;
+};
+
+interface SingleQuantumOrbitalPointsProps {
+  shell: number;
+  subshell: 's' | 'p' | 'd';
+  axis?: string;
+  count: number;
+  elementColor: string;
+  cloudDensity: number;
+  orbitalExcitation: number;
+}
+
+const SingleQuantumOrbitalPoints = ({
+  shell,
+  subshell,
+  axis,
+  count,
+  elementColor,
+  cloudDensity,
+  orbitalExcitation
+}: SingleQuantumOrbitalPointsProps) => {
+  const pointsRef = useRef<THREE.Points>(null);
+
+  const { positions, colors } = useMemo(() => {
+    // Generate distinct points based on subshell scale and sliders parameter
+    const basePoints = subshell === 's' ? 180 : subshell === 'p' ? 220 : 260;
+    const ptsCount = Math.round(basePoints * (cloudDensity / 40) * count);
+    
+    const posArr = new Float32Array(ptsCount * 3);
+    const colArr = new Float32Array(ptsCount * 3);
+
+    const baseColor = new THREE.Color(elementColor);
+    const phaseColor = new THREE.Color();
+    const hsl = { h: 0, s: 0, l: 0 };
+    baseColor.getHSL(hsl);
+    // Complementary quantum wave phase offset colour (+108 degrees)
+    phaseColor.setHSL((hsl.h + 0.3) % 1.0, Math.min(1.0, hsl.s * 1.15), Math.max(0.4, hsl.l * 0.95));
+
+    // Box-muller random gaussian function
+    const randn = () => {
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random(); 
+      while (v === 0) v = Math.random();
+      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    };
+
+    const baseRadius = shell === 1 ? 0.9 : shell === 2 ? 1.8 : shell === 3 ? 2.8 : 4.0;
+
+    for (let i = 0; i < ptsCount; i++) {
+      let x = 0, y = 0, z = 0;
+      let phaseIsPositive = true;
+
+      if (subshell === 's') {
+        const theta = Math.acos(2.0 * Math.random() - 1.0);
+        const phi = Math.random() * Math.PI * 2.0;
+        let r = baseRadius;
+
+        if (shell === 1) {
+          r = (0.5 + 0.5 * Math.abs(randn())) * baseRadius;
+        } else if (shell === 2) {
+          if (Math.random() < 0.15) {
+            r = (0.3 + 0.3 * Math.abs(randn())) * 0.6; // Inner node peak
+          } else {
+            r = (0.7 + 0.3 * Math.abs(randn())) * baseRadius; // Outer shell peak
+          }
+        } else if (shell === 3) {
+          const randVal = Math.random();
+          if (randVal < 0.1) {
+            r = (0.3 + 0.3 * Math.abs(randn())) * 0.35;
+          } else if (randVal < 0.3) {
+            r = (0.5 + 0.3 * Math.abs(randn())) * 1.25;
+          } else {
+            r = (0.8 + 0.25 * Math.abs(randn())) * baseRadius;
+          }
+        } else { // 4s shell
+          const randVal = Math.random();
+          if (randVal < 0.05) {
+            r = (0.3 + 0.3 * Math.abs(randn())) * 0.2;
+          } else if (randVal < 0.15) {
+            r = (0.4 + 0.3 * Math.abs(randn())) * 1.0;
+          } else if (randVal < 0.35) {
+            r = (0.6 + 0.25 * Math.abs(randn())) * 2.3;
+          } else {
+            r = (0.8 + 0.22 * Math.abs(randn())) * baseRadius;
+          }
+        }
+
+        x = r * Math.sin(theta) * Math.cos(phi);
+        y = r * Math.sin(theta) * Math.sin(phi);
+        z = r * Math.cos(theta);
+        phaseIsPositive = true; // Uniform s sylvan shell
+      } 
+      else if (subshell === 'p') {
+        const isPositiveLobe = Math.random() > 0.5;
+        const sign = isPositiveLobe ? 1 : -1;
+        const thetaDev = randn() * 0.28;
+        const phiDev = Math.random() * Math.PI * 2.0;
+        const r = (0.9 + randn() * 0.18) * baseRadius;
+
+        const xLocal = sign * r * Math.cos(thetaDev);
+        const yLocal = r * Math.sin(thetaDev) * Math.cos(phiDev);
+        const zLocal = r * Math.sin(thetaDev) * Math.sin(phiDev);
+
+        if (axis === 'x') {
+          x = xLocal; y = yLocal; z = zLocal;
+        } else if (axis === 'y') {
+          x = yLocal; y = xLocal; z = zLocal;
+        } else {
+          x = zLocal; y = yLocal; z = xLocal;
+        }
+
+        phaseIsPositive = isPositiveLobe; // Opposite physical phases
+      } 
+      else if (subshell === 'd') {
+        const r = (1.0 + randn() * 0.16) * baseRadius;
+        
+        if (axis === 'z2') {
+          if (Math.random() < 0.6) {
+            const isPositiveLobe = Math.random() > 0.5;
+            const sign = isPositiveLobe ? 1 : -1;
+            const thetaDev = randn() * 0.28;
+            const phiDev = Math.random() * Math.PI * 2.0;
+
+            x = r * Math.sin(thetaDev) * Math.cos(phiDev);
+            y = r * Math.sin(thetaDev) * Math.sin(phiDev);
+            z = sign * r * Math.cos(thetaDev);
+            phaseIsPositive = true;
+          } else {
+            const phiTorus = Math.random() * Math.PI * 2.0;
+            const rTorus = (0.6 + randn() * 0.12) * baseRadius;
+            const zTorus = randn() * 0.15;
+
+            x = rTorus * Math.cos(phiTorus);
+            y = rTorus * Math.sin(phiTorus);
+            z = zTorus;
+            phaseIsPositive = false;
+          }
+        } else {
+          const quadrant = Math.floor(Math.random() * 4);
+          let phiCenter = 0;
+          if (axis === 'xy' || axis === 'yz' || axis === 'zx') {
+            phiCenter = Math.PI / 4.0 + quadrant * Math.PI / 2.0;
+          } else if (axis === 'x2-y2') {
+            phiCenter = quadrant * Math.PI / 2.0;
+          }
+
+          const dPhi = randn() * 0.16;
+          const thetaDev = Math.PI / 2.0 + randn() * 0.16;
+
+          const xLocal = r * Math.sin(thetaDev) * Math.cos(phiCenter + dPhi);
+          const yLocal = r * Math.sin(thetaDev) * Math.sin(phiCenter + dPhi);
+          const zLocal = r * Math.cos(thetaDev);
+
+          if (axis === 'xy' || axis === 'x2-y2') {
+            x = xLocal; y = yLocal; z = zLocal;
+          } else if (axis === 'yz') {
+            x = zLocal; y = xLocal; z = yLocal;
+          } else {
+            x = yLocal; y = zLocal; z = xLocal;
+          }
+
+          phaseIsPositive = quadrant % 2 === 0;
+        }
+      }
+
+      // Record Positions
+      posArr[i * 3] = x;
+      posArr[i * 3 + 1] = y;
+      posArr[i * 3 + 2] = z;
+
+      // Color coding representing quantum wave phases
+      const chosenColor = phaseIsPositive ? baseColor : phaseColor;
+      const distToOrigin = Math.sqrt(x*x + y*y + z*z);
+      const densityIntensity = Math.max(0.35, Math.min(1.0, 1.25 - (distToOrigin / (baseRadius * 1.55))));
+      
+      colArr[i * 3] = chosenColor.r * densityIntensity;
+      colArr[i * 3 + 1] = chosenColor.g * densityIntensity;
+      colArr[i * 3 + 2] = chosenColor.b * densityIntensity;
+    }
+
+    return { positions: posArr, colors: colArr };
+  }, [shell, subshell, axis, count, elementColor, cloudDensity]);
+
+  useFrame((state) => {
+    if (pointsRef.current) {
+      const elapsed = state.clock.getElapsedTime();
+      const speed = elapsed * orbitalExcitation * (1.15 / shell);
+      
+      if (subshell === 'p') {
+        if (axis === 'x') {
+          pointsRef.current.rotation.x = speed * 0.12;
+        } else if (axis === 'y') {
+          pointsRef.current.rotation.y = speed * 0.12;
+        } else {
+          pointsRef.current.rotation.z = speed * 0.12;
+        }
+      } else if (subshell === 'd') {
+        pointsRef.current.rotation.y = speed * 0.22;
+        pointsRef.current.rotation.x = speed * 0.08;
+      } else {
+        pointsRef.current.rotation.y = speed * 0.06;
+      }
+
+      const pulse = 1.0 + Math.sin(elapsed * 2.5 * orbitalExcitation + shell) * 0.035;
+      pointsRef.current.scale.set(pulse, pulse, pulse);
+    }
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute 
+          attach="attributes-position" 
+          args={[positions, 3]} 
+        />
+        <bufferAttribute 
+          attach="attributes-color" 
+          args={[colors, 3]} 
+        />
+      </bufferGeometry>
+      <pointsMaterial 
+        size={0.05} 
+        vertexColors
+        transparent
+        opacity={0.7}
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+      />
+    </points>
+  );
+};
+
+interface QuantumOrbitalCloudProps {
+  Z: number;
+  color: string;
+  cloudDensity: number;
+  orbitalExcitation: number;
+}
+
+const QuantumOrbitalCloud = ({
+  Z,
+  color,
+  cloudDensity,
+  orbitalExcitation
+}: QuantumOrbitalCloudProps) => {
+  const configs = useMemo(() => getOrbitalConfig(Z), [Z]);
+
+  return (
+    <group>
+      {configs.map((cfg, idx) => (
+        <SingleQuantumOrbitalPoints 
+          key={`${cfg.shell}-${cfg.subshell}-${cfg.axis || 'none'}-${idx}`}
+          shell={cfg.shell}
+          subshell={cfg.subshell}
+          axis={cfg.axis}
+          count={cfg.count}
+          elementColor={color}
+          cloudDensity={cloudDensity}
+          orbitalExcitation={orbitalExcitation}
+        />
+      ))}
+    </group>
+  );
+};
+
+interface SpacetimeAtomProps {
+  id: DashboardId;
+  atomicNumber: number;
+  cloudDensity?: number;
+  orbitalExcitation?: number;
+  showBohrTracks?: boolean;
+}
+
+const SpacetimeAtom = ({ 
+  id, 
+  atomicNumber,
+  cloudDensity = 40,
+  orbitalExcitation = 1.5,
+  showBohrTracks = true
+}: SpacetimeAtomProps) => {
   const element = useMemo(() => ELEMENTS.find(e => e.atomicNumber === atomicNumber), [atomicNumber]);
+  const quantumView = useDashboardStore(s => s.quantumView);
+
   if (!element) return null;
 
   const nucleusParticles = useMemo(() => {
@@ -624,62 +1009,73 @@ const SpacetimeAtom = ({ id, atomicNumber }: { id: DashboardId, atomicNumber: nu
           ))}
         </group>
 
-        {/* --- QUANTUM MECHANICS MODEL: Probability Electron Clouds --- */}
-        {/* 1s spherical orbital cloud density */}
-        <mesh>
-          <sphereGeometry args={[0.9, 16, 16]} />
-          <meshBasicMaterial color={element.color} transparent opacity={0.08} blending={THREE.AdditiveBlending} />
-        </mesh>
+        {quantumView ? (
+          <QuantumOrbitalCloud 
+            Z={atomicNumber} 
+            color={element.color} 
+            cloudDensity={cloudDensity} 
+            orbitalExcitation={orbitalExcitation} 
+          />
+        ) : (
+          <>
+            {/* --- QUANTUM MECHANICS MODEL: Probability Electron Clouds --- */}
+            {/* 1s spherical orbital cloud density */}
+            <mesh>
+              <sphereGeometry args={[0.9, 16, 16]} />
+              <meshBasicMaterial color={element.color} transparent opacity={0.08} blending={THREE.AdditiveBlending} />
+            </mesh>
 
-        {/* 2s spherical orbital cloud density (rendered for elements with elements in n=2 shell) */}
-        {element.atomicNumber > 2 && (
-          <mesh>
-            <sphereGeometry args={[1.8, 20, 20]} />
-            <meshBasicMaterial color={element.color} transparent opacity={0.04} blending={THREE.AdditiveBlending} />
-          </mesh>
-        )}
+            {/* 2s spherical orbital cloud density (rendered for elements with elements in n=2 shell) */}
+            {element.atomicNumber > 2 && (
+              <mesh>
+                <sphereGeometry args={[1.8, 20, 20]} />
+                <meshBasicMaterial color={element.color} transparent opacity={0.04} blending={THREE.AdditiveBlending} />
+              </mesh>
+            )}
 
-        {/* 2p dumbbell orbital clouds (dumbbell shapes along X, Y, Z coordinates for p-block elements) */}
-        {element.atomicNumber >= 5 && (
-          <group>
-            {/* 2px orbital lobe pair along X axis */}
-            <group rotation={[0, 0, 0]}>
-              <mesh position={[-1.7, 0, 0]}>
-                <sphereGeometry args={[0.42, 12, 12]} />
-                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
-              </mesh>
-              <mesh position={[1.7, 0, 0]}>
-                <sphereGeometry args={[0.42, 12, 12]} />
-                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
-              </mesh>
-            </group>
-            {/* 2py orbital lobe pair along Y axis */}
-            <group rotation={[0, 0, Math.PI / 2]}>
-              <mesh position={[-1.7, 0, 0]}>
-                <sphereGeometry args={[0.42, 12, 12]} />
-                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
-              </mesh>
-              <mesh position={[1.7, 0, 0]}>
-                <sphereGeometry args={[0.42, 12, 12]} />
-                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
-              </mesh>
-            </group>
-            {/* 2pz orbital lobe pair along Z axis */}
-            <group rotation={[0, Math.PI / 2, 0]}>
-              <mesh position={[-1.7, 0, 0]}>
-                <sphereGeometry args={[0.42, 12, 12]} />
-                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
-              </mesh>
-              <mesh position={[1.7, 0, 0]}>
-                <sphereGeometry args={[0.42, 12, 12]} />
-                <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
-              </mesh>
-            </group>
-          </group>
+            {/* 2p dumbbell orbital clouds (dumbbell shapes along X, Y, Z coordinates for p-block elements) */}
+            {element.atomicNumber >= 5 && (
+              <group>
+                {/* 2px orbital lobe pair along X axis */}
+                <group rotation={[0, 0, 0]}>
+                  <mesh position={[-1.7, 0, 0]}>
+                    <sphereGeometry args={[0.42, 12, 12]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                  <mesh position={[1.7, 0, 0]}>
+                    <sphereGeometry args={[0.42, 12, 12]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                </group>
+                {/* 2py orbital lobe pair along Y axis */}
+                <group rotation={[0, 0, Math.PI / 2]}>
+                  <mesh position={[-1.7, 0, 0]}>
+                    <sphereGeometry args={[0.42, 12, 12]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                  <mesh position={[1.7, 0, 0]}>
+                    <sphereGeometry args={[0.42, 12, 12]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                </group>
+                {/* 2pz orbital lobe pair along Z axis */}
+                <group rotation={[0, Math.PI / 2, 0]}>
+                  <mesh position={[-1.7, 0, 0]}>
+                    <sphereGeometry args={[0.42, 12, 12]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                  <mesh position={[1.7, 0, 0]}>
+                    <sphereGeometry args={[0.42, 12, 12]} />
+                    <meshBasicMaterial color={element.color} transparent opacity={0.05} blending={THREE.AdditiveBlending} />
+                  </mesh>
+                </group>
+              </group>
+            )}
+          </>
         )}
 
         {/* Bohr classical ring tracks for visual contrast indicator */}
-        {element.electrons.map((count, shellIdx) => {
+        {showBohrTracks && element.electrons.map((count, shellIdx) => {
           const shellRadius = 1.4 + shellIdx * 0.9;
           return (
             <group key={shellIdx}>
@@ -1178,11 +1574,12 @@ const SpacetimeHuman = () => {
   );
 };
 
-// Smooth Camera Transition Controller that interpolates camera focus
+// Smooth Camera Transition Controller that interpolates camera focus and automates seamless microscope zooming
 const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
   const { camera, size } = useThree();
   const controlsRef = useRef<any>(null);
   const activeIdRef = useRef<DashboardId | null>(null);
+  const setDashboardId = useDashboardStore(s => s.setDashboardId);
 
   useEffect(() => {
     const handleZoomEvent = (e: any) => {
@@ -1191,15 +1588,15 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
       const dir = camera.position.clone().sub(target);
       
       if (e.detail === 'in') {
-        dir.multiplyScalar(0.75); // zoom in
+        dir.multiplyScalar(0.70); // snappy zoom in
       } else if (e.detail === 'out') {
-        dir.multiplyScalar(1.33); // zoom out
+        dir.multiplyScalar(1.43); // snappy zoom out
       }
       
-      // Enforce limits roughly
+      // Lift zoom limits entirely to allow subatomic to cosmic scale zooming
       const dist = dir.length();
-      if (dist < 0.00001) dir.setLength(0.00001);
-      if (dist > 15000) dir.setLength(15000);
+      if (dist < 1e-15) dir.setLength(1e-15);
+      if (dist > 1e18) dir.setLength(1e18);
 
       camera.position.copy(target).add(dir);
       controlsRef.current.update();
@@ -1246,12 +1643,18 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
       mars: 1.5,
       mercury: 1.0,
       moon: 0.8,
-      skeleton: 0.08,
-      cell: 0.025,
-      mitochondria: 0.015,
-      carbon: 0.0005,
-      oxygen: 0.0005
+      human: 0.08,
+      skeleton: 0.04,
+      cell: 0.015,
+      mitochondria: 0.006,
     };
+
+    // Ensure all atomic elements are assigned correct focus and target scale distances
+    ATOM_IDS.forEach(atomId => {
+      if (!targetDistances[atomId]) {
+        targetDistances[atomId] = 0.0004;
+      }
+    });
 
     if (controlsRef.current) {
       const targetCoordsVec = new THREE.Vector3(
@@ -1260,6 +1663,99 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
         OBJECT_COORDS[activeId][2]
       );
 
+      const currentTarget = controlsRef.current.target;
+      const currentDist = camera.position.distanceTo(currentTarget);
+
+      // --- SEAMLESS SCALE TRANSITION ZOOMING CONTROL ---
+      // Monitors real-time distance and automatically steps into smaller/larger physical scales
+      if (activeIdRef.current === activeId) {
+        const isPlanet = ['mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'moon'].includes(activeId);
+        let minDist = 0.05;
+        let maxDist = 50.0;
+        let nextId: DashboardId | null = null;
+        let prevId: DashboardId | null = null;
+
+        if (activeId === 'sun') {
+          minDist = 35.0;
+          maxDist = 15000.0;
+          nextId = 'earth';
+          prevId = null;
+        } else if (isPlanet) {
+          minDist = 0.35;
+          maxDist = 45.0; // Zoom out to astronomical scale
+          nextId = 'human';
+          prevId = 'sun';
+        } else if (activeId === 'human') {
+          minDist = 0.015;
+          maxDist = 0.35;
+          nextId = 'skeleton';
+          prevId = 'earth';
+        } else if (activeId === 'skeleton') {
+          minDist = 0.007;
+          maxDist = 0.015;
+          nextId = 'cell';
+          prevId = 'human';
+        } else if (activeId === 'cell') {
+          minDist = 0.0022;
+          maxDist = 0.007;
+          nextId = 'mitochondria';
+          prevId = 'skeleton';
+        } else if (activeId === 'mitochondria') {
+          minDist = 0.0010;
+          maxDist = 0.0022;
+          nextId = 'carbon'; // Default to Carbon Atom when zooming down organelles
+          prevId = 'cell';
+        } else if (ATOM_IDS.includes(activeId)) {
+          minDist = 1e-15; // Unlimited nucleus/subatomic zoom
+          maxDist = 0.0010;
+          nextId = null;
+          prevId = 'mitochondria';
+        }
+
+        if (currentDist < minDist && nextId) {
+          // STEP DOWN/ZOOM IN: seamless transition into smaller organic or atomic levels
+          activeIdRef.current = nextId;
+          setDashboardId(nextId);
+
+          const nextCoords = new THREE.Vector3(
+            OBJECT_COORDS[nextId][0],
+            OBJECT_COORDS[nextId][1],
+            OBJECT_COORDS[nextId][2]
+          );
+          const nextTargetDistance = targetDistances[nextId] || 0.0004;
+          const dir = camera.position.clone().sub(currentTarget);
+          if (dir.lengthSq() === 0) dir.set(0, 0, 1);
+          dir.normalize();
+
+          // Reposition camera cleanly at outer threshold of next target along the same perspective line
+          camera.position.copy(nextCoords).add(dir.multiplyScalar(nextTargetDistance * 1.5));
+          currentTarget.copy(nextCoords);
+          controlsRef.current.update();
+          return;
+        } else if (currentDist > maxDist && prevId) {
+          // STEP UP/ZOOM OUT: seamless transition into larger astronomical or physiological layers
+          activeIdRef.current = prevId;
+          setDashboardId(prevId);
+
+          const prevCoords = new THREE.Vector3(
+            OBJECT_COORDS[prevId][0],
+            OBJECT_COORDS[prevId][1],
+            OBJECT_COORDS[prevId][2]
+          );
+          const prevTargetDistance = targetDistances[prevId] || 200;
+          const dir = camera.position.clone().sub(currentTarget);
+          if (dir.lengthSq() === 0) dir.set(0, 0, 1);
+          dir.normalize();
+
+          // Reposition camera cleanly inside the parent scale bounds along the same perspective line
+          camera.position.copy(prevCoords).add(dir.multiplyScalar(prevTargetDistance * 0.75));
+          currentTarget.copy(prevCoords);
+          controlsRef.current.update();
+          return;
+        }
+      }
+
+      // Standard transition lerps (like clicking side menus or initial landing)
       if (activeIdRef.current !== activeId) {
         // Transitional Lerp to lock onto the newly selected target's position
         const targetDist = (targetDistances[activeId] || 200) * aspectAdjustment;
@@ -1270,7 +1766,6 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
         if (dir.lengthSq() === 0) dir.set(0, 0, 1);
         dir.normalize();
 
-        const currentDist = camera.position.distanceTo(currentTarget);
         const newDist = THREE.MathUtils.lerp(currentDist, targetDist, 0.08);
         camera.position.copy(currentTarget.clone().add(dir.multiplyScalar(newDist)));
         controlsRef.current.update();
@@ -1297,8 +1792,8 @@ const SpacetimeCameraController = ({ activeId }: { activeId: DashboardId }) => {
       ref={controlsRef}
       enablePan={true}
       enableZoom={true}
-      minDistance={0.00001}
-      maxDistance={15000}
+      minDistance={1e-15}
+      maxDistance={1e18}
       enableDamping
       dampingFactor={0.05}
     />
@@ -1343,40 +1838,40 @@ const LABEL_OFFSETS: Record<DashboardId, [number, number, number]> = {
 };
 
 const RANGES: Record<string, [number, number]> = {
-  sun: [50, 15000],
-  jupiter: [50, 15000],
-  saturn: [50, 15000],
-  uranus: [20, 15000],
-  neptune: [20, 15000],
-  mercury: [2, 100],
-  venus: [2, 100],
-  earth: [0.5, 100],
-  mars: [1, 100],
-  moon: [0.1, 5],
-  skeleton: [0.01, 0.5],
-  human: [0.01, 0.5],
-  cell: [0.001, 0.08],
-  mitochondria: [0.001, 0.05],
-  hydrogen: [0.00001, 0.002],
-  helium: [0.00001, 0.002],
-  lithium: [0.00001, 0.002],
-  beryllium: [0.00001, 0.002],
-  boron: [0.00001, 0.002],
-  carbon: [0.00001, 0.002],
-  nitrogen: [0.00001, 0.002],
-  oxygen: [0.00001, 0.002],
-  fluorine: [0.00001, 0.002],
-  neon: [0.00001, 0.002],
-  sodium: [0.00001, 0.002],
-  magnesium: [0.00001, 0.002],
-  aluminum: [0.00001, 0.002],
-  silicon: [0.00001, 0.002],
-  phosphorus: [0.00001, 0.002],
-  sulfur: [0.00001, 0.002],
-  chlorine: [0.00001, 0.002],
-  argon: [0.00001, 0.002],
-  potassium: [0.00001, 0.002],
-  calcium: [0.00001, 0.002]
+  sun: [50, 1e18],
+  jupiter: [50, 1e18],
+  saturn: [50, 1e18],
+  uranus: [20, 1e18],
+  neptune: [20, 1e18],
+  mercury: [2, 1e10],
+  venus: [2, 1e10],
+  earth: [0.5, 1e10],
+  mars: [1, 1e10],
+  moon: [0.1, 1e9],
+  skeleton: [1e-15, 1e6],
+  human: [1e-15, 1e6],
+  cell: [1e-15, 1e6],
+  mitochondria: [1e-15, 1e6],
+  hydrogen: [1e-18, 1e4],
+  helium: [1e-18, 1e4],
+  lithium: [1e-18, 1e4],
+  beryllium: [1e-18, 1e4],
+  boron: [1e-18, 1e4],
+  carbon: [1e-18, 1e4],
+  nitrogen: [1e-18, 1e4],
+  oxygen: [1e-18, 1e4],
+  fluorine: [1e-18, 1e4],
+  neon: [1e-18, 1e4],
+  sodium: [1e-18, 1e4],
+  magnesium: [1e-18, 1e4],
+  aluminum: [1e-18, 1e4],
+  silicon: [1e-18, 1e4],
+  phosphorus: [1e-18, 1e4],
+  sulfur: [1e-18, 1e4],
+  chlorine: [1e-18, 1e4],
+  argon: [1e-18, 1e4],
+  potassium: [1e-18, 1e4],
+  calcium: [1e-18, 1e4]
 };
 
 const ScaleTracker = ({ activeId }: { activeId: DashboardId }) => {
@@ -1390,7 +1885,9 @@ const ScaleTracker = ({ activeId }: { activeId: DashboardId }) => {
       );
       const dist = camera.position.distanceTo(targetCoordsVec);
       let scaleName = "";
-      if (dist > 50) {
+      if (dist > 15000) {
+        scaleName = "COSMIC UNIVERSE SCALE (LY)";
+      } else if (dist > 50) {
         scaleName = "ASTRONOMICAL SCALE (AU)";
       } else if (dist > 1) {
         scaleName = "PLANETARY SCALE (10^4 km)";
@@ -1398,8 +1895,10 @@ const ScaleTracker = ({ activeId }: { activeId: DashboardId }) => {
         scaleName = "BIOLOGICAL SCALE (m)";
       } else if (dist > 0.005) {
         scaleName = "CELLULAR SCALE (μm)";
-      } else {
+      } else if (dist > 0.0001) {
         scaleName = "ATOMIC SCALE (pm)";
+      } else {
+        scaleName = "QUANTUM & SUBATOMIC SCALE (fm)";
       }
       if (el.innerText !== scaleName) {
         el.innerText = scaleName;
@@ -2316,7 +2815,9 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
     simulationActive, 
     setSimulationActive, 
     clearSimulation,
-    activeReaction
+    activeReaction,
+    quantumView,
+    setQuantumView
   } = useDashboardStore();
 
   const [collisionSpeedPct, setCollisionSpeedPct] = useState<number>(50);
@@ -2838,6 +3339,96 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
         </div>
       )}
 
+      {/* 🔬 Dedicated Quantum & Atom Observation Controls */}
+      {!simulationMode && ATOM_IDS.includes(activeId) && (
+        <div id="quantum-observation-hud" className="absolute top-[80px] left-6 z-40 w-76 bg-[#08080d]/95 border border-[#c084fc]/30 rounded-lg p-4 flex flex-col gap-3.5 shadow-[0_10px_35px_rgba(0,0,0,0.9)] backdrop-blur-xl animate-fade-in text-white/90 max-h-[75%] overflow-y-auto">
+          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">⚛️</span>
+              <div>
+                <h3 className="text-xs font-mono font-bold tracking-wider text-cyan-400 uppercase leading-none">Quantum View Deck</h3>
+                <span className="text-[7.5px] uppercase text-white/40 block font-mono mt-0.5">Focus: {activeId}</span>
+              </div>
+            </div>
+            <span className="text-[8px] uppercase font-bold py-0.5 px-1.5 rounded bg-cyan-950 border border-cyan-800/30 text-cyan-300">
+              { quantumView ? 'Wave Cloud' : 'Classical' }
+            </span>
+          </div>
+
+          <p className="text-[10px] text-white/60 leading-normal font-sans">
+            Visualizing the Schrödinger wave function probability density <span className="text-cyan-400 font-mono font-bold">|ψ|²</span> representing orbital shell configurations.
+          </p>
+
+          <div className="space-y-2.5">
+            {/* Toggle Wave Cloud vs Bohr classical model */}
+            <div className="flex items-center justify-between p-2 bg-white/5 border border-white/5 rounded-md">
+              <span className="text-[9.5px] font-mono tracking-wide text-white/50 uppercase">Schrödinger Mode:</span>
+              <button
+                onClick={() => setQuantumView(!quantumView)}
+                className={`px-3 py-1 rounded text-[9.5px] font-mono uppercase transition-colors shrink-0 font-bold border ${
+                  quantumView 
+                    ? 'bg-cyan-950 border-cyan-500 text-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.2)]'
+                    : 'bg-neutral-900 border-white/10 text-white/40'
+                }`}
+              >
+                {quantumView ? 'ACTIVE' : 'INACTIVE'}
+              </button>
+            </div>
+
+            {quantumView && (
+              <div className="space-y-2.5 border-t border-white/5 pt-2.5">
+                {/* Cloud density customizer */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[9px] font-mono">
+                    <span className="text-white/40">Probability Points:</span>
+                    <span className="text-cyan-300 font-bold font-mono">{cloudDensity * 4} particles</span>
+                  </div>
+                  <input 
+                    type="range"
+                    min="10"
+                    max="120"
+                    step="5"
+                    value={cloudDensity}
+                    onChange={(e) => setCloudDensity(parseInt(e.target.value))}
+                    className="w-full h-1 bg-neutral-800 accent-cyan-400 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                {/* Excitation customizer */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[9px] font-mono">
+                    <span className="text-white/40">Valence wave flux:</span>
+                    <span className="text-cyan-300 font-bold font-mono">{orbitalExcitation.toFixed(1)}x</span>
+                  </div>
+                  <input 
+                    type="range"
+                    min="0.5"
+                    max="4.0"
+                    step="0.1"
+                    value={orbitalExcitation}
+                    onChange={(e) => setOrbitalExcitation(parseFloat(e.target.value))}
+                    className="w-full h-1 bg-neutral-800 accent-cyan-400 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                {/* Bohr track overlap toggle */}
+                <div className="grid grid-cols-2 gap-2 pt-1 font-mono">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[9px] text-white/60 hover:text-white transition-colors">
+                    <input 
+                      type="checkbox"
+                      checked={showBohrTracks}
+                      onChange={(e) => setShowBohrTracks(e.target.checked)}
+                      className="rounded bg-black border-white/10 text-cyan-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span>Show Energy Ring</span>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Embedded Chemical Reactants Selector Bar */}
       {simulationMode && !simulationActive && (
         <div id="quick-reactants-bar" className="absolute bottom-[80px] left-6 right-6 z-40 bg-[#08080d]/90 border border-[#a855f7]/20 rounded-lg p-3 backdrop-blur-md flex flex-col gap-2 shadow-[0_5px_15px_rgba(0,0,0,0.5)]">
@@ -2920,7 +3511,7 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
         </div>
       </div>
 
-      <Canvas camera={{ position: [0, 0, 200], fov: 45, near: 0.000001, far: 50000 }}>
+      <Canvas camera={{ position: [0, 0, 200], fov: 45, near: 1e-15, far: 1e18 }} gl={{ logarithmicDepthBuffer: true }}>
         <ScaleTracker activeId={activeId} />
         <OrbitalMechanics />
         <color attach="background" args={['#000000']} />
@@ -2955,7 +3546,14 @@ export const SpacetimeCanvas: React.FC<SpacetimeCanvasProps> = ({ activeId, onSe
         <SpacetimePlanet id="neptune" radius={3.9} color="#3b82f6" rotationSpeed={0.11} />
         
         {ATOM_IDS.map((sym, idx) => (
-          <SpacetimeAtom key={sym} id={sym} atomicNumber={idx + 1} />
+          <SpacetimeAtom 
+            key={sym} 
+            id={sym} 
+            atomicNumber={idx + 1} 
+            cloudDensity={cloudDensity}
+            orbitalExcitation={orbitalExcitation}
+            showBohrTracks={showBohrTracks}
+          />
         ))}
         <SpacetimeEukaryoticCell />
         <SpacetimeCell />
