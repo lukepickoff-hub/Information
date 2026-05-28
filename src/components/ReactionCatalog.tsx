@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Sparkles, ChevronDown, ChevronUp, Zap, HelpCircle } from 'lucide-react';
+import { Search, Sparkles, ChevronDown, ChevronUp, Zap, HelpCircle, Activity, CheckCircle2 } from 'lucide-react';
 import { REACTION_DOMAINS, ReactionDomain, ReactionItem } from '../data/reactionData';
 import { useDashboardStore } from '../store/useDashboardStore';
 import { DASHBOARD_DATA } from '../data/dashboardData';
@@ -33,6 +33,584 @@ const rxInvolvesObject = (rx: ReactionItem, objId: string): boolean => {
            (normObj.length === 2 && aName.includes(` ${normObj.charAt(0).toUpperCase()}${normObj.charAt(1).toLowerCase()}`));
   }) || rx.equation.toLowerCase().includes(normObj);
 };
+
+export interface ReactionStep {
+  label: string;
+  type: 'barrier' | 'intermediate' | 'transduction' | 'equilibrium';
+  energyChange?: string;
+  description: string;
+}
+
+export function getReactionTimelineSteps(rxId: string, rxName: string, equation: string): ReactionStep[] {
+  // Strip "-rec" from recommended keys
+  const cleanId = rxId.replace('-rec', '');
+
+  const database: Record<string, ReactionStep[]> = {
+    star_pp1: [
+      {
+        label: "Electrostatic Barrier Crossing",
+        type: "barrier",
+        energyChange: "Activation: Ultra High",
+        description: "Two protons (¹H) collide deep inside the stellar core at 15,000,000 Kelvin, overcoming absolute mutual Coulomb repulsion via extreme thermal collision speeds."
+      },
+      {
+        label: "Weak Beta Conversion",
+        type: "intermediate",
+        energyChange: "Beta+ Transition",
+        description: "The weak force converts an approaching proton into a neutron at the exact quantum interface, emitting a positron (e⁺) and an electron neutrino (νₑ)."
+      },
+      {
+        label: "Positron Annihilation Spill",
+        type: "transduction",
+        energyChange: "+0.42 MeV Released",
+        description: "The newly born positron instantly meets a free core plasma electron, annihilating together to disperse two thermalizing gamma-ray photons."
+      },
+      {
+        label: "Deuteron Synthesis Peak",
+        type: "equilibrium",
+        energyChange: "Stable Isotopes",
+        description: "A stable Deuterium nucleus (²H) reaches binding equilibrium, providing the critical foundation isotope for subsequent thermonuclear steps."
+      }
+    ],
+    star_pp2: [
+      {
+        label: "Deuteron Thermal Swarm",
+        type: "barrier",
+        energyChange: "Activation: Medium",
+        description: "A newly synthesized Deuterium nucleus (²H) encounters a free thermal proton (¹H) floating with energetic speeds inside the high-density solar core."
+      },
+      {
+        label: "Strong Force Adhesion",
+        type: "intermediate",
+        energyChange: "Unstable Intermediate",
+        description: "The Deuterium and proton touch, triggering short-range strong nuclear bonds that fuse the particles into a highly excited state of Helium-3."
+      },
+      {
+        label: "Radiative Decay De-excitation",
+        type: "transduction",
+        energyChange: "+5.49 MeV Released",
+        description: "The excited nucleus discharges its energetic surplus by firing off a high-frequency, non-thermal gamma-ray (γ) photon directly into the stellar body."
+      },
+      {
+        label: "Stable Helium-3 Deposit",
+        type: "equilibrium",
+        energyChange: "³He Stable Ground",
+        description: "The Helium-3 nucleus settles into a stable drift state, ready for subsequent molecular encounters in the main fusion sequence."
+      }
+    ],
+    star_pp3a: [
+      {
+        label: "Helium-3 Dual Compression",
+        type: "barrier",
+        energyChange: "Activation: High",
+        description: "Two Helium-3 nuclei drift through the dense stellar core and collide at close range, overcoming mutual electrostatic charges."
+      },
+      {
+        label: "Unstable Beryllium-6 State",
+        type: "intermediate",
+        energyChange: "Unstable ⁶Be Intermediate",
+        description: "The strong nuclear force triggers a brief, highly unstable structural union containing 4 protons and 2 neutrons."
+      },
+      {
+        label: "Thermonuclear Cleaving",
+        type: "transduction",
+        energyChange: "+12.86 MeV Released",
+        description: "The unstable configuration collapses into an incredibly stable Helium-4 alpha core, violently ejecting 2 excess protons."
+      },
+      {
+        label: "Stable Alpha Ash System",
+        type: "equilibrium",
+        energyChange: "⁴He Ash Stable",
+        description: "The Helium-4 nucleus drops as stable heavy ash, while the 2 ejected protons immediately recycle into the core fusion pool."
+      }
+    ],
+    star_cno1: [
+      {
+        label: "Stellar Carbon Collision",
+        type: "barrier",
+        energyChange: "Core Excitation",
+        description: "In stars heavier than 1.5 Solar Masses, a thermal proton penetrates the electromagnetic shield of a catalytic Carbon-12 nucleus."
+      },
+      {
+        label: "Nitrogen-13 Synthesis",
+        type: "intermediate",
+        energyChange: "Unstable Synthesis",
+        description: "The nuclear particles fuse to synthesize high-energy Nitrogen-13, an unstable intermediate state with tight bindings."
+      },
+      {
+        label: "Gamma Wave Deflection",
+        type: "transduction",
+        energyChange: "+1.95 MeV Released",
+        description: "Nitrogen-13 releases excess energy by emitting an intense gamma-ray (γ) quantum wave, transforming kinetic energy into radiation."
+      },
+      {
+        label: "Catalyst Cycle Entrance",
+        type: "equilibrium",
+        energyChange: "¹³N Ground State",
+        description: "The stable Nitrogen-13 nucleus prepares for beta-plus decay into Carbon-13, completing the initial segment of the CNO catalytic loop."
+      }
+    ],
+    plant_photolysis: [
+      {
+        label: "Photon Shock Inception",
+        type: "barrier",
+        energyChange: "Excitation Peak",
+        description: "Incident sunlight strikes the Photosystem II reaction center, forcing the P680 chlorophyll pair to eject a high-energy electron."
+      },
+      {
+        label: "Oxygen-Evolving Active Stack",
+        type: "intermediate",
+        energyChange: "Catalytic Charge",
+        description: "The electron-deficient P680+ center transfers charge to a nearby Manganese-Calcium cluster (Mn₄CaO₅), accumulating four oxidizing equivalents."
+      },
+      {
+        label: "Covalent Splitting of Water",
+        type: "transduction",
+        energyChange: "Bond Scission",
+        description: "The heavily charged manganese complex extracts electrons from two adjacent water (H₂O) molecules, splitting O-H single bonds."
+      },
+      {
+        label: "Oxygen Outflow & Proton Heap",
+        type: "equilibrium",
+        energyChange: "Exergonic Release",
+        description: "Oxygen gas (O₂) is discharged. Four protons are thrown into the thylakoid lumen, and electrons are guided into the electron transport chain."
+      }
+    ],
+    plant_atp_synth: [
+      {
+        label: "Electrochemical Potential Build",
+        type: "barrier",
+        energyChange: "Proton Gradient",
+        description: "Biological membrane pumps heap a massive electrochemical charge of protons (H⁺) inside the tight thylakoid lumen."
+      },
+      {
+        label: "Mechanical Rotor Rotation",
+        type: "intermediate",
+        energyChange: "Rotor Torques",
+        description: "Protons flow through the half-channels of the ATP synthase complex, neutralizing key amino-acid charges to spin the c-ring rotor."
+      },
+      {
+        label: "Catalytic Compression Stress",
+        type: "transduction",
+        energyChange: "Mechanical Transfer",
+        description: "The central spinning shaft mechanically deforms active sites in the F₁ head, squeezing ADP and Inorganic Phosphate together."
+      },
+      {
+        label: "Anhydride Phosphate Captivation",
+        type: "equilibrium",
+        energyChange: "+30.5 kJ/mol Stored",
+        description: "The intense physical compression forms a stable phosphoanhydride bond, storing cellular energy as synthesized ATP."
+      }
+    ],
+    plant_rubisco: [
+      {
+        label: "RuBP Substrate Docking",
+        type: "barrier",
+        energyChange: "Activation Phase",
+        description: "Ribulose 1,5-bisphosphate docks at the active site of the Rubisco enzyme and undergoes enolization, creating an enediol intermediate."
+      },
+      {
+        label: "Carbon Dioxide Carboxylation",
+        type: "intermediate",
+        energyChange: "Transient C6 Intermediate",
+        description: "Gaseous carbon dioxide is targeted by the enediol, establishing a highly unstable six-carbon intermediate."
+      },
+      {
+        label: "Hydrolytic Separation",
+        type: "transduction",
+        energyChange: "Hydrolysis Split",
+        description: "Water enters the active chamber and breaks the six-carbon intermediate apart, cleaving its bonds to yield two 3-carbon structures."
+      },
+      {
+        label: "Calvin Sugar Stabilization",
+        type: "equilibrium",
+        energyChange: "Calvin Captives",
+        description: "The segments stabilize as two molecules of 3-phosphoglycerate (3-PGA), anchoring gaseous carbon into physical organic carbon."
+      }
+    ],
+    cell_glyc1: [
+      {
+        label: "Cytoplasmic Glucose Gating",
+        type: "barrier",
+        energyChange: "Enzyme Clamping",
+        description: "A free glucose molecule docks within the active cleft of the Hexokinase enzyme in the cell cytoplasm."
+      },
+      {
+        label: "Magnesium-ATP Configuration",
+        type: "intermediate",
+        energyChange: "Active Substrate",
+        description: "Hexokinase aligns an ATP molecule coordinated with a critical magnesium (Mg²⁺) ion directly adjacent to the glucose tail."
+      },
+      {
+        label: "Gamma Phosphate Interlocking",
+        type: "transduction",
+        energyChange: "-16.7 kJ/mol Exergonic",
+        description: "The 6-hydroxyl group of glucose undergoes nucleophilic attack on the ATP gamma-phosphate, transferring the phosphate."
+      },
+      {
+        label: "Intracellular Grid Locking",
+        type: "equilibrium",
+        energyChange: "Glucose 6-P Trap",
+        description: "The highly polar Glucose-6-Phosphate cannot cross the hydrophobic membrane, locking it inside the cellular respiration pipeline."
+      }
+    ],
+    cell_pdh: [
+      {
+        label: "Enzymatic Decarboxylation",
+        type: "barrier",
+        energyChange: "CO₂ Release",
+        description: "Pyruvate docks at Pyruvate Dehydrogenase (E₁); its carboxyl team is severed and emitted as carbon dioxide, storing energy on TPP."
+      },
+      {
+        label: "Lipoamide Disulfide Rotation",
+        type: "intermediate",
+        energyChange: "Electron Transfer",
+        description: "The hydroxyethyl segment of E₁ is oxidized. It is transferred to the rotating lipoamide arm of the E₂ core."
+      },
+      {
+        label: "Acetyl-CoA Synthesis Wave",
+        type: "transduction",
+        energyChange: "Thioester Loading",
+        description: "The acetyl group is shifted onto Coenzyme A, producing highly energetic Acetyl-CoA with an unstable sulfur bond."
+      },
+      {
+        label: "Electrochemical NADH Shift",
+        type: "equilibrium",
+        energyChange: "E3 Reoxidation",
+        description: "Dihydrolipoamide is oxidized at the E₃ center back to the active disulfide state, producing NADH to fuel the electron transport chain."
+      }
+    ],
+    cell_krebs1: [
+      {
+        label: "Oxaloacetate Conformational Locking",
+        type: "barrier",
+        energyChange: "Active Site Open",
+        description: "Oxaloacetate docks inside Citrate Synthase, forcing a profound conformational shift that prepares the binding pocket for Acetyl-CoA."
+      },
+      {
+        label: "Acetyl Deprotonation Wave",
+        type: "intermediate",
+        energyChange: "Active Enol Formation",
+        description: "An active-site histidine base abstracts a proton from Acetyl-CoA, creating a highly reactive, transient enol nucleophile."
+      },
+      {
+        label: "Condensation To Citryl-CoA",
+        type: "transduction",
+        energyChange: "Intermediate Bond",
+        description: "The enol nucleophile attacks oxaloacetate's carbonyl carbon, forming a temporary covalently-bound citryl-CoA intermediate."
+      },
+      {
+        label: "Irreversible Citrate Expulsion",
+        type: "equilibrium",
+        energyChange: "-31.4 kJ/mol Exergonic",
+        description: "Water rapidly cleaves the citryl-CoA thioester bond, forming Citrate and pushing the Krebs cycle forward deterministically."
+      }
+    ],
+    cell_etc5: [
+      {
+        label: "Four-Electron Loading Stack",
+        type: "barrier",
+        energyChange: "Metallic Transition",
+        description: "Cytochrome c molecules successively donate four electrons to Cytochrome c Oxidase's metal nuclei (Heme a₃ and Cu_B)."
+      },
+      {
+        label: "Diatomic Peroxygen Docking",
+        type: "intermediate",
+        energyChange: "Bound Peroxide state",
+        description: "Molecular Oxygen (O₂) enters the enzymatic core, anchoring between the iron of Heme a₃ and Cu_B to establish a stable peroxide link."
+      },
+      {
+        label: "Proton Extraction & Bond Breaking",
+        type: "transduction",
+        energyChange: "Strong-Bond Rupture",
+        description: "The enzyme extracts 4 protons from the battery matrix, cleaving the strong oxygen-oxygen double bond of molecular oxygen."
+      },
+      {
+        label: "Dual Water Discharge & Pump",
+        type: "equilibrium",
+        energyChange: "Water Release",
+        description: "Two stable water (H₂O) molecules are synthesized, and massive energy release pumps 4 protons across the mitochondrial membrane."
+      }
+    ],
+    planet_iron_ox: [
+      {
+        label: "Aqueous Ferrous Diffusion",
+        type: "barrier",
+        energyChange: "Soluble Ion Drift",
+        description: "Primordial geothermal vents release soluble divalent iron (Fe²⁺) ions, spreading throughout early earth's oxygen-deficient oceans."
+      },
+      {
+        label: "Biogenic Oxygen Intersection",
+        type: "intermediate",
+        energyChange: "Plume Confluence",
+        description: "Early photosynthetic cyanobacteria produce oxygen (O₂), creating highly-active localized oxidizing zones in upper ocean layers."
+      },
+      {
+        label: "Divalent Electron Strip",
+        type: "transduction",
+        energyChange: "Valence Conversion",
+        description: "Oxygen acts as an electron acceptor, stripping electrons from dissolved Fe²⁺ and converting them into insoluble trivalent ferric iron (Fe³⁺)."
+      },
+      {
+        label: "Hematite Geological Deposit",
+        type: "equilibrium",
+        energyChange: "Iron Crust Deposit",
+        description: "Insoluble ferric iron complexes precipitate, settling to the prehistoric seafloor as Hematite (Fe₂O₃) layers to form global iron bands."
+      }
+    ],
+    planet_lightning_fix: [
+      {
+        label: "Atmospheric Plasma Shockwave",
+        type: "barrier",
+        energyChange: "30,000 Kelvin Peak",
+        description: "A super-voltage strike of natural lightning rips through atmospheric nitrogen (N₂) and oxygen (O₂) molecules."
+      },
+      {
+        label: "Atmospheric Triple-Bond Rupture",
+        type: "intermediate",
+        energyChange: "Dissociation: High",
+        description: "Super-thermal heat completely fractures the exceptionally stable nitrogen triple bond (N≡N) and oxygen double bond (O=O)."
+      },
+      {
+        label: "Nitric Oxide Coalition",
+        type: "transduction",
+        energyChange: "+180 kJ/mol Stored",
+        description: "Highly-reactive dissociated nitrogen and oxygen radicals combine to synthesize Nitric Oxide (NO) as the plasma shockwave chills."
+      },
+      {
+        label: "Deposition Acidification Rainout",
+        type: "equilibrium",
+        energyChange: "Nitrate Enrichment",
+        description: "NO oxidizes into NO₂ gas, dissolves inside atmospheric water droplets to create Nitric Acid, enriching ancient soils with life-giving nitrates."
+      }
+    ],
+    organ_pacemaker: [
+      {
+        label: "Diastolic Funny Current Leak",
+        type: "barrier",
+        energyChange: "Slow Depolarization",
+        description: "Hyperpolarization activates 'funny' sodium channels (I_f) inside cardiac node cells, triggering a slow inward leak of Na⁺ ions."
+      },
+      {
+        label: "T-Type Gate Opening",
+        type: "intermediate",
+        energyChange: "Calcium Permeability",
+        description: "Membrane potential hits -50mV, unlocking localized T-type low-voltage calcium gates to speed the cellular charge toward threshold."
+      },
+      {
+        label: "L-Type Calcium Influx Explosion",
+        type: "transduction",
+        energyChange: "Action potential spark",
+        description: "At the -40mV threshold, high-conductance L-type calcium channels swing open, and a flood of Ca²⁺ fires the rapid action potential spike."
+      },
+      {
+        label: "Gated Potassium Repolarization",
+        type: "equilibrium",
+        energyChange: "Potential Reset",
+        description: "Calcium channels lock shut. Voltage-gated potassium (K⁺) channels trigger, dumping positive charges from the cell to restore the -60mV rest potential."
+      }
+    ],
+    animal_hemoglobin: [
+      {
+        label: "Tense Quaternary Conformation",
+        type: "barrier",
+        energyChange: "High Barrier Target",
+        description: "Deoxygenated hemoglobin exists in an un-flexed, rigid 'Tense' (T) conformation with very low affinity for gaseous oxygen."
+      },
+      {
+        label: "Initial Heme Oxygen Dock",
+        type: "intermediate",
+        energyChange: "Coordination Change",
+        description: "An oxygen (O₂) molecule squeezes in to coordinate with the divalent iron (Fe²⁺) center of the first subunit's heme ring."
+      },
+      {
+        label: "Relayed Cooperative Transition",
+        type: "transduction",
+        energyChange: "R-Conformation Snap",
+        description: "The bound iron pulls into the plane of the porphyrin ring, moving the proximal histidine and snapping adjacent subunits into high-affinity 'Relaxed' (R) state."
+      },
+      {
+        label: "Oxygen Saturation Peak",
+        type: "equilibrium",
+        energyChange: "Saturated Hemoglobin",
+        description: "Affinity multiplies by 300x. The remaining three heme pockets coordinate oxygen instantly, finalizing saturated transport (Hb(O₂)₄)."
+      }
+    ]
+  };
+
+  if (database[cleanId]) {
+    return database[cleanId];
+  }
+
+  // Fallback dynamic step synthesizer based on equation text
+  const sides = equation.split('→');
+  const reactants = sides[0] ? sides[0].trim() : "Reactants";
+  const products = sides[1] ? sides[1].trim() : "Products";
+
+  return [
+    {
+      label: "Inter-molecular Collision & Alignment",
+      type: "barrier",
+      energyChange: "Activation Barrier",
+      description: `The starting reagents and molecules (${reactants}) approach each other in highly localized spatial domains, needing adequate velocity to match orbital requirements.`
+    },
+    {
+      label: "Electronic & Valency Restructuring",
+      type: "intermediate",
+      energyChange: "Transition State",
+      description: "Electronic electron orbital spheres or nuclear alignments deform under extreme proximity stress, forming excited and transient intermediate bonds."
+    },
+    {
+      label: "Surplus Thermodynamic Decoupling",
+      type: "transduction",
+      energyChange: "Exothermic Dispersal",
+      description: "The systems snap into a lower-energy electronic/subatomic state, dropping their mass-energy excess and emitting thermodynamic or radiative energy (heat, light or photons)."
+    },
+    {
+      label: "Dissipated Final Stabilization",
+      type: "equilibrium",
+      energyChange: "Stable Products",
+      description: `The resulting products (${products}) settle into steady mechanical and subatomic rest states, raising local and global environmental entropy.`
+    }
+  ];
+}
+
+export function ReactionTimeline({ 
+  reactionId, 
+  reactionName, 
+  equation, 
+  color 
+}: { 
+  reactionId: string; 
+  reactionName: string; 
+  equation: string; 
+  color: string;
+}) {
+  const steps = useMemo(() => getReactionTimelineSteps(reactionId, reactionName, equation), [reactionId, reactionName, equation]);
+  const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
+
+  const getStepIcon = (type: string) => {
+    switch (type) {
+      case 'barrier':
+        return <Zap className="w-3 h-3 text-amber-400" />;
+      case 'intermediate':
+        return <Activity className="w-3 h-3 text-cyan-400 animate-pulse" />;
+      case 'transduction':
+        return <Sparkles className="w-3 h-3 text-purple-400" />;
+      case 'equilibrium':
+        return <CheckCircle2 className="w-3 h-3 text-emerald-400" />;
+      default:
+        return <HelpCircle className="w-3 h-3 text-white/40" />;
+    }
+  };
+
+  return (
+    <div className="border border-white/5 rounded bg-black/40 p-3 space-y-3 font-mono">
+      <div className="flex items-center justify-between pb-1.5 border-b border-white/5">
+        <div className="flex items-center gap-1.5">
+          <Activity className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+          <span className="text-[8px] uppercase tracking-widest font-bold text-white/50">Matter & Energy Conversion Timeline</span>
+        </div>
+        <span className="text-[7px] text-white/30 uppercase font-bold select-none">Interactive Stepper</span>
+      </div>
+
+      <div className="relative pl-1.5 space-y-2.5">
+        {/* Continuous vertical connector line */}
+        <div className="absolute top-4 bottom-4 left-4 w-[1px] bg-white/10" />
+
+        {steps.map((step, idx) => {
+          const isActive = activeStepIndex === idx;
+          return (
+            <div 
+              key={idx}
+              className={`relative flex gap-3 p-1.5 rounded transition-all duration-200 cursor-pointer ${
+                isActive 
+                  ? 'bg-white/[0.02] border border-white/5 shadow-inner' 
+                  : 'hover:bg-white/[0.01] border border-transparent'
+              }`}
+              onClick={() => setActiveStepIndex(idx)}
+            >
+              {/* Stepper active bar */}
+              {isActive && (
+                <div 
+                  className="absolute left-0 top-0 bottom-0 w-[2px]" 
+                  style={{ backgroundColor: color }}
+                />
+              )}
+
+              {/* Glowing vertical node */}
+              <div className="relative z-10 flex items-center justify-center shrink-0">
+                <div 
+                  className={`w-[22px] h-[22px] rounded-full flex items-center justify-center text-[9px] font-bold transition-all duration-300 ${
+                    isActive 
+                      ? 'bg-black text-white border' 
+                      : 'bg-[#08080f] text-white/40 border border-white/10'
+                  }`}
+                  style={{ 
+                    borderColor: isActive ? color : 'rgba(255,255,255,0.1)',
+                    boxShadow: isActive ? `0 0 10px ${color}30` : 'none'
+                  }}
+                >
+                  {String(idx + 1).padStart(2, '0')}
+                </div>
+              </div>
+
+              {/* content */}
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-start justify-between gap-1.5">
+                  <span 
+                    className={`text-[9.5px] font-bold block truncate tracking-tight transition-colors ${
+                      isActive ? 'text-white' : 'text-white/60'
+                    }`}
+                  >
+                    {step.label}
+                  </span>
+                  
+                  {step.energyChange && (
+                    <span 
+                      className="text-[6.5px] font-bold uppercase tracking-wider px-1 py-0.5 rounded shrink-0 leading-none bg-black/40 border select-none"
+                      style={{ 
+                        color: isActive ? color : 'rgba(255,255,255,0.4)',
+                        borderColor: isActive ? `${color}35` : 'rgba(255,255,255,0.05)'
+                      }}
+                    >
+                      {step.energyChange}
+                    </span>
+                  )}
+                </div>
+
+                {/* Collapsible description container */}
+                {isActive ? (
+                  <div className="text-[8.5px] font-sans text-white/60 leading-relaxed pt-1 flex gap-2 items-start animate-fade-in">
+                    <div className="mt-0.5 shrink-0 select-none">{getStepIcon(step.type)}</div>
+                    <div>
+                      <p className="font-sans leading-relaxed">
+                        {step.description}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-1.5 border-t border-white/5 pt-1 text-[7px] text-white/30 tracking-wider">
+                        <span className="font-mono uppercase">PHASE TYPE:</span>
+                        <span 
+                          className="font-mono font-bold uppercase"
+                          style={{ color: color }}
+                        >
+                          {step.type}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-[7.5px] font-sans text-white/35 block truncate select-none">
+                    Click to view phase transition details...
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 interface ReactionCatalogProps {
   onAskAI: (question: string) => void;
@@ -278,6 +856,14 @@ export function ReactionCatalog({ onAskAI, onTriggerReactionInChamber }: Reactio
                           </p>
                         </div>
 
+                        {/* Reaction Evolution Timeline */}
+                        <ReactionTimeline 
+                          reactionId={rx.id} 
+                          reactionName={rx.name} 
+                          equation={rx.equation} 
+                          color={rx.domain.color} 
+                        />
+
                         {/* Specs Chips */}
                         {rx.atoms.length > 0 && (
                           <div className="space-y-1">
@@ -423,6 +1009,14 @@ export function ReactionCatalog({ onAskAI, onTriggerReactionInChamber }: Reactio
                                 {rx.description}
                               </p>
                             </div>
+
+                            {/* Reaction Evolution Timeline */}
+                            <ReactionTimeline 
+                              reactionId={rx.id} 
+                              reactionName={rx.name} 
+                              equation={rx.equation} 
+                              color={domain.color} 
+                            />
 
                             {/* Involved Reactants & Elements (Colored Chips) */}
                             {rx.atoms.length > 0 && (
