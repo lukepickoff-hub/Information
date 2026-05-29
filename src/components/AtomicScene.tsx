@@ -441,9 +441,288 @@ const MetallicElectron = ({ p, pos1, pos2 }: { p: any, pos1: [number, number, nu
   );
 };
 
+// ── CUSTOM HEAVY BIOTECH INTEGRATIONS: DRAGGING, TREMBLING & WELL SNAP MECHANISMS ──
+
+const BondShockwave = ({ active, timestamp }: { active: boolean; timestamp: number }) => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  useFrame(() => {
+    if (!active || !meshRef.current) return;
+    const elapsed = (performance.now() - timestamp) / 1000;
+    const duration = 0.55; 
+    if (elapsed > duration) return;
+    const progress = elapsed / duration;
+    const scale = 1.0 + progress * 10.5;
+    meshRef.current.scale.set(scale, scale, scale);
+    if (meshRef.current.material && !Array.isArray(meshRef.current.material)) {
+      (meshRef.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0, (1.0 - progress) * 0.85);
+    }
+  });
+
+  if (!active) return null;
+
+  return (
+    <mesh ref={meshRef} rotation={[0, Math.PI / 2, 0]}>
+      <ringGeometry args={[0.9, 1.25, 32]} />
+      <meshBasicMaterial 
+        color="#f43f5e" 
+        transparent 
+        opacity={0.8} 
+        side={THREE.DoubleSide} 
+        blending={THREE.AdditiveBlending} 
+        depthWrite={false} 
+      />
+    </mesh>
+  );
+};
+
+const ReconstitutionFlash = ({ active, timestamp }: { active: boolean; timestamp: number }) => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  useFrame(() => {
+    if (!active || !meshRef.current) return;
+    const elapsed = (performance.now() - timestamp) / 1000;
+    const duration = 0.45;
+    if (elapsed > duration) return;
+    const progress = elapsed / duration;
+    const scale = (1.0 - progress) * 5.5;
+    meshRef.current.scale.set(scale, scale, scale);
+    if (meshRef.current.material && !Array.isArray(meshRef.current.material)) {
+      (meshRef.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0, (1.0 - progress) * 0.95);
+    }
+  });
+
+  if (!active) return null;
+
+  return (
+    <mesh ref={meshRef}>
+      <sphereGeometry args={[1.0, 32, 32]} />
+      <meshBasicMaterial 
+        color="#38bdf8" 
+        transparent 
+        opacity={0.95} 
+        blending={THREE.AdditiveBlending} 
+        depthWrite={false} 
+      />
+    </mesh>
+  );
+};
+
+const EnergeticForceField = ({ 
+  pos1, 
+  pos2, 
+  distanceScale, 
+  isBroken, 
+  bondColor 
+}: { 
+  pos1: [number, number, number]; 
+  pos2: [number, number, number]; 
+  distanceScale: number; 
+  isBroken: boolean; 
+  bondColor: string; 
+}) => {
+  const line1Ref = useRef<any>(null);
+  const line2Ref = useRef<any>(null);
+
+  useFrame(({ clock }) => {
+    if (isBroken) return;
+    const t = clock.getElapsedTime() * 15;
+    const segments = 32;
+    const pts1 = [];
+    const pts2 = [];
+
+    // Wave amplitude peaks when compressed (repulsion stress), stretches thin when far
+    const amp = distanceScale < 1.0 
+      ? Math.max(0.01, (1.0 - distanceScale) * 0.98) 
+      : Math.max(0.01, (distanceScale - 1.0) * 0.28);
+
+    for (let i = 0; i <= segments; i++) {
+      const pct = i / segments;
+      const x = THREE.MathUtils.lerp(pos1[0], pos2[0], pct);
+      const baseAngle = pct * Math.PI * 6 + t;
+      
+      // Helix 1
+      const y1 = THREE.MathUtils.lerp(pos1[1], pos2[1], pct) + Math.cos(baseAngle) * amp;
+      const z1 = THREE.MathUtils.lerp(pos1[2], pos2[2], pct) + Math.sin(baseAngle) * amp;
+      pts1.push(new THREE.Vector3(x, y1, z1));
+
+      // Helix 2 (180 degrees phase offset)
+      const y2 = THREE.MathUtils.lerp(pos1[1], pos2[1], pct) + Math.cos(baseAngle + Math.PI) * amp;
+      const z2 = THREE.MathUtils.lerp(pos1[2], pos2[2], pct) + Math.sin(baseAngle + Math.PI) * amp;
+      pts2.push(new THREE.Vector3(x, y2, z2));
+    }
+
+    if (line1Ref.current) line1Ref.current.setPoints(pts1);
+    if (line2Ref.current) line2Ref.current.setPoints(pts2);
+  });
+
+  if (isBroken) {
+    // Faded red fracture line representation
+    return (
+      <Line
+        points={[pos1, pos2]}
+        color="#ef4444"
+        lineWidth={1}
+        transparent
+        opacity={0.12}
+      />
+    );
+  }
+
+  return (
+    <group>
+      <Line
+        ref={line1Ref}
+        points={[pos1, pos2]}
+        color={bondColor}
+        lineWidth={2.5}
+        transparent
+        opacity={0.65}
+      />
+      <Line
+        ref={line2Ref}
+        points={[pos1, pos2]}
+        color={bondColor}
+        lineWidth={2.5}
+        transparent
+        opacity={0.65}
+      />
+      <Line
+        points={[pos1, pos2]}
+        color="#ffffff"
+        lineWidth={0.8}
+        transparent
+        opacity={0.2}
+      />
+    </group>
+  );
+};
+
+const DraggableVibratingAtom = ({ 
+  element, 
+  which, 
+  baseX, 
+  distanceScale,
+  draggedAtom,
+  setDraggedAtom, 
+  dragStartScale, 
+  dragStartClientX,
+  isBroken,
+  bondType,
+  onDistanceScaleChange
+}: { 
+  element: ElementData; 
+  which: 1 | 2; 
+  baseX: number; 
+  distanceScale: number;
+  draggedAtom: 1 | 2 | null;
+  setDraggedAtom: (w: 1 | 2 | null) => void;
+  dragStartScale: React.MutableRefObject<number>;
+  dragStartClientX: React.MutableRefObject<number>;
+  isBroken: boolean;
+  bondType: string;
+  onDistanceScaleChange: (scale: number) => void;
+}) => {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    if (!groupRef.current) return;
+    const t = clock.getElapsedTime() * 115; // fast frequency vibration
+    
+    let jitterX = 0;
+    let jitterY = 0;
+    let jitterZ = 0;
+
+    if (bondType && bondType !== 'inert' && !isBroken) {
+      if (distanceScale < 1.0) {
+        // Violently trembling under strong core electron cloud repulsion
+        const intensity = Math.pow(1.0 - distanceScale, 2.0) * 2.5;
+        jitterX = Math.sin(t) * intensity;
+        jitterY = Math.cos(t * 1.3) * intensity;
+        jitterZ = Math.sin(t * 0.7) * intensity;
+      } else if (distanceScale > 1.15 && distanceScale < 1.35) {
+        // Tanned/stretched near snap point limit
+        const intensity = (distanceScale - 1.15) * 0.15;
+        jitterX = Math.sin(t * 0.4) * intensity;
+        jitterY = Math.cos(t * 0.55) * intensity;
+      }
+    }
+
+    groupRef.current.position.set(baseX + jitterX, 0 + jitterY, 0 + jitterZ);
+  });
+
+  return (
+    <group
+      ref={groupRef}
+      onPointerDown={(e) => {
+        if (!bondType || bondType === 'inert') return;
+        e.stopPropagation();
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        setDraggedAtom(which);
+        dragStartScale.current = distanceScale;
+        dragStartClientX.current = e.clientX;
+      }}
+      onPointerMove={(e) => {
+        if (draggedAtom === which) {
+          e.stopPropagation();
+          const deltaX = e.clientX - dragStartClientX.current;
+          const factor = which === 1 ? -1 : 1;
+          const newScale = Math.max(0.45, Math.min(1.8, dragStartScale.current + (deltaX * factor * 0.0055)));
+          onDistanceScaleChange(parseFloat(newScale.toFixed(4)));
+        }
+      }}
+      onPointerUp={(e) => {
+        if (draggedAtom === which) {
+          e.stopPropagation();
+          (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+          setDraggedAtom(null);
+        }
+      }}
+    >
+      <AtomModel 
+        element={element} 
+        position={[0, 0, 0]} 
+        fadeOutOutermost={!isBroken && bondType !== 'inert' && bondType !== 'metallic'} 
+      />
+    </group>
+  );
+};
+
 export const AtomicScene = ({ embedded = false }: { embedded?: boolean }) => {
     const { selectedElement, selectedElement2, bondingMode, setTableOpen } = useAtomicStore();
     const [distanceScale, setDistanceScale] = useState<number>(1.0);
+
+    const [draggedAtom, setDraggedAtom] = useState<1 | 2 | null>(null);
+    const dragStartScale = useRef<number>(1.0);
+    const dragStartClientX = useRef<number>(0);
+
+    const [snapActive, setSnapActive] = useState<boolean>(false);
+    const [snapTime, setSnapTime] = useState<number>(0);
+    const [reformActive, setReformActive] = useState<boolean>(false);
+    const [reformTime, setReformTime] = useState<number>(0);
+    const wasBrokenRef = useRef<boolean>(false);
+
+    const showBonding = bondingMode && selectedElement2;
+    const isBroken = showBonding && distanceScale > 1.35;
+
+    useEffect(() => {
+        if (!showBonding) {
+            wasBrokenRef.current = false;
+            setSnapActive(false);
+            setReformActive(false);
+            return;
+        }
+        if (wasBrokenRef.current !== isBroken) {
+            if (isBroken) {
+                setSnapActive(true);
+                setSnapTime(performance.now());
+                setReformActive(false);
+            } else {
+                setReformActive(true);
+                setReformTime(performance.now());
+                setSnapActive(false);
+            }
+            wasBrokenRef.current = isBroken;
+        }
+    }, [isBroken, showBonding]);
 
     const [isDrifting, setIsDrifting] = useState<boolean>(false);
     const [cumulativeReleasedEnergy, setCumulativeReleasedEnergy] = useState<number>(0);
@@ -567,7 +846,6 @@ export const AtomicScene = ({ embedded = false }: { embedded?: boolean }) => {
         );
     }
 
-    const showBonding = bondingMode && selectedElement2;
     const bond = showBonding && selectedElement2 ? calculateBond(selectedElement, selectedElement2, distanceScale) : null;
     
     // Core structural distance calculations
@@ -575,9 +853,6 @@ export const AtomicScene = ({ embedded = false }: { embedded?: boolean }) => {
     const shell2 = selectedElement2 ? 3 + (selectedElement2.electrons.length - 1) * 1.5 : 0;
     const standardDist = shell1 + shell2; 
     const currentDist = standardDist * distanceScale;
-
-    // Is the bond broken/dissociated? (Atoms pulled too far apart)
-    const isBroken = showBonding && distanceScale > 1.35;
 
     const pos1: [number, number, number] = showBonding ? [-currentDist / 2, 0, 0] : [0, 0, 0];
     const pos2: [number, number, number] = showBonding ? [currentDist / 2, 0, 0] : [0, 0, 0];
@@ -608,108 +883,139 @@ export const AtomicScene = ({ embedded = false }: { embedded?: boolean }) => {
                 
                 <Stars radius={100} depth={50} count={2000} factor={4} saturation={1} fade speed={1} />
                 
-                <AtomModel 
-                   element={selectedElement} 
-                   position={pos1} 
-                   fadeOutOutermost={showBonding && !isBroken && bond?.type !== 'inert' && bond?.type !== 'metallic'} 
-                />
-                
-                {showBonding && selectedElement2 && bond && (
+                {/* Visual Snapping & Reconstitution Event Overlays */}
+                <BondShockwave active={snapActive} timestamp={snapTime} />
+                <ReconstitutionFlash active={reformActive} timestamp={reformTime} />
+
+                {!showBonding ? (
+                    <AtomModel 
+                       element={selectedElement} 
+                       position={pos1} 
+                    />
+                ) : (
                     <>
-                        <AtomModel 
-                           element={selectedElement2} 
-                           position={pos2} 
-                           fadeOutOutermost={showBonding && !isBroken && bond?.type !== 'inert' && bond?.type !== 'metallic'} 
-                        />
-                        
-                        {/* Electrostatic Line representation */}
-                        <Line
-                            points={[pos1, pos2]}
-                            color={isBroken ? "#dc2626" : "#ffffff"}
-                            lineWidth={isBroken ? 1 : 2}
-                            transparent
-                            opacity={isBroken ? 0.1 : 0.3}
+                        {/* Interactive Drag Node 1 */}
+                        <DraggableVibratingAtom
+                            element={selectedElement}
+                            which={1}
+                            baseX={pos1[0]}
+                            distanceScale={distanceScale}
+                            draggedAtom={draggedAtom}
+                            setDraggedAtom={setDraggedAtom}
+                            dragStartScale={dragStartScale}
+                            dragStartClientX={dragStartClientX}
+                            isBroken={isBroken}
+                            bondType={bond?.type || ''}
+                            onDistanceScaleChange={setDistanceScale}
                         />
 
-                        {/* Rendering different interactive bonds */}
-                        {!isBroken && (
+                        {selectedElement2 && bond && (
                             <>
-                                {/* Shared covalent electron clouds */}
-                                {(bond.type === 'covalent' || bond.type === 'polar_covalent') && (
+                                {/* Interactive Drag Node 2 */}
+                                <DraggableVibratingAtom
+                                    element={selectedElement2}
+                                    which={2}
+                                    baseX={pos2[0]}
+                                    distanceScale={distanceScale}
+                                    draggedAtom={draggedAtom}
+                                    setDraggedAtom={setDraggedAtom}
+                                    dragStartScale={dragStartScale}
+                                    dragStartClientX={dragStartClientX}
+                                    isBroken={isBroken}
+                                    bondType={bond?.type || ''}
+                                    onDistanceScaleChange={setDistanceScale}
+                                />
+
+                                {/* Double-spiral force-field line representation */}
+                                <EnergeticForceField
+                                    pos1={pos1}
+                                    pos2={pos2}
+                                    distanceScale={distanceScale}
+                                    isBroken={isBroken}
+                                    bondColor={getBondColor()}
+                                />
+
+                                {/* Rendering different interactive bonds */}
+                                {!isBroken && (
                                     <>
-                                        {/* Dynamic shared cloud */}
-                                        <mesh position={[(pos1[0] + pos2[0])/2 + (bond.type === 'polar_covalent' ? (en1 > en2 ? -currentDist * 0.1 : currentDist * 0.1) : 0), 0, 0]}>
-                                            <sphereGeometry args={[(shell1 * 0.38 + shell2 * 0.38) * (2.0 - distanceScale), 32, 32]} />
-                                            <meshBasicMaterial 
-                                               color={bond.type === 'covalent' ? "#06b6d4" : "#f59e0b"} 
-                                               transparent 
-                                               opacity={0.16 * (1.6 - distanceScale)} 
-                                               blending={THREE.AdditiveBlending} 
-                                            />
-                                        </mesh>
+                                        {/* Shared covalent electron clouds */}
+                                        {(bond.type === 'covalent' || bond.type === 'polar_covalent') && (
+                                            <>
+                                                {/* Dynamic shared cloud */}
+                                                <mesh position={[(pos1[0] + pos2[0])/2 + (bond.type === 'polar_covalent' ? (en1 > en2 ? -currentDist * 0.1 : currentDist * 0.1) : 0), 0, 0]}>
+                                                    <sphereGeometry args={[(shell1 * 0.38 + shell2 * 0.38) * (2.0 - distanceScale), 32, 32]} />
+                                                    <meshBasicMaterial 
+                                                       color={bond.type === 'covalent' ? "#06b6d4" : "#f59e0b"} 
+                                                       transparent 
+                                                       opacity={0.16 * (1.6 - distanceScale)} 
+                                                       blending={THREE.AdditiveBlending} 
+                                                    />
+                                                </mesh>
 
-                                        {/* Shared electron particles in Figure-Eight loops */}
-                                        {Array.from({ length: bond.sharedElectrons }).map((_, i) => (
-                                            <SharedElectron 
-                                                key={`shared-${i}`}
-                                                dist={currentDist}
-                                                speed={1.8}
-                                                offsetAngle={(i * Math.PI) / (bond.sharedElectrons / 2 || 1)}
-                                                color="#e0f2fe"
+                                                {/* Shared electron particles in Figure-Eight loops */}
+                                                {Array.from({ length: bond.sharedElectrons }).map((_, i) => (
+                                                    <SharedElectron 
+                                                        key={`shared-${i}`}
+                                                        dist={currentDist}
+                                                        speed={1.8}
+                                                        offsetAngle={(i * Math.PI) / (bond.sharedElectrons / 2 || 1)}
+                                                        color="#e0f2fe"
+                                                    />
+                                                ))}
+                                            </>
+                                        )}
+
+                                        {/* Ionic Bond transfers */}
+                                        {bond.type === 'ionic' && (
+                                            <>
+                                                {/* Attraction Shell Glow around atoms */}
+                                                <mesh position={pos1}>
+                                                    <sphereGeometry args={[shell1 * 1.1, 32, 32]} />
+                                                    <meshBasicMaterial color={selectedElement.color} transparent opacity={0.03} wireframe />
+                                                </mesh>
+                                                <mesh position={pos2}>
+                                                    <sphereGeometry args={[shell2 * 1.1, 32, 32]} />
+                                                    <meshBasicMaterial color={selectedElement2.color} transparent opacity={0.03} wireframe />
+                                                </mesh>
+
+                                                {/* Jumping electrons transfer */}
+                                                {Array.from({ length: bond.sharedElectrons }).map((_, i) => (
+                                                    <IonicElectronTransfer 
+                                                        key={`ionic-e-${i}`}
+                                                        pos1={pos1}
+                                                        pos2={pos2}
+                                                        speed={1.0 + i * 0.2}
+                                                        color="#fcb0f3"
+                                                    />
+                                                ))}
+
+                                                <ElectrostaticParticleFlow pos1={pos1} pos2={pos2} />
+
+                                                {/* Attraction electrostatic link ring between the cations and anions */}
+                                                <mesh position={[0, 0, 0]} rotation={[0, Math.PI/2, 0]}>
+                                                    <ringGeometry args={[1.5, 1.55, 32]} />
+                                                    <meshBasicMaterial color="#ec4899" transparent opacity={0.15} side={THREE.DoubleSide} />
+                                                </mesh>
+                                            </>
+                                        )}
+
+                                        {/* Metallic swarm */}
+                                        {bond.type === 'metallic' && (
+                                            <MetallicElectronSea 
+                                                pos1={pos1} 
+                                                pos2={pos2} 
+                                                color1={selectedElement.color} 
+                                                color2={selectedElement2.color} 
                                             />
-                                        ))}
+                                        )}
                                     </>
-                                )}
-
-                                {/* Ionic Bond transfers */}
-                                {bond.type === 'ionic' && (
-                                    <>
-                                        {/* Attraction Shell Glow around atoms */}
-                                        <mesh position={pos1}>
-                                            <sphereGeometry args={[shell1 * 1.1, 32, 32]} />
-                                            <meshBasicMaterial color={selectedElement.color} transparent opacity={0.03} wireframe />
-                                        </mesh>
-                                        <mesh position={pos2}>
-                                            <sphereGeometry args={[shell2 * 1.1, 32, 32]} />
-                                            <meshBasicMaterial color={selectedElement2.color} transparent opacity={0.03} wireframe />
-                                        </mesh>
-
-                                        {/* Jumping electrons transfer */}
-                                        {Array.from({ length: bond.sharedElectrons }).map((_, i) => (
-                                            <IonicElectronTransfer 
-                                                key={`ionic-e-${i}`}
-                                                pos1={pos1}
-                                                pos2={pos2}
-                                                speed={1.0 + i * 0.2}
-                                                color="#fcb0f3"
-                                            />
-                                        ))}
-
-                                        <ElectrostaticParticleFlow pos1={pos1} pos2={pos2} />
-
-                                        {/* Attraction electrostatic link ring between the cations and anions */}
-                                        <mesh position={[0, 0, 0]} rotation={[0, Math.PI/2, 0]}>
-                                            <ringGeometry args={[1.5, 1.55, 32]} />
-                                            <meshBasicMaterial color="#ec4899" transparent opacity={0.15} side={THREE.DoubleSide} />
-                                        </mesh>
-                                    </>
-                                )}
-
-                                {/* Metallic swarm */}
-                                {bond.type === 'metallic' && (
-                                    <MetallicElectronSea 
-                                        pos1={pos1} 
-                                        pos2={pos2} 
-                                        color1={selectedElement.color} 
-                                        color2={selectedElement2.color} 
-                                    />
                                 )}
                             </>
                         )}
                     </>
                 )}
 
-                <OrbitControls enablePan={false} minDistance={2} maxDistance={40} autoRotate={!showBonding} autoRotateSpeed={0.5} />
+                <OrbitControls enablePan={false} minDistance={2} maxDistance={40} autoRotate={!showBonding} autoRotateSpeed={0.5} enabled={!draggedAtom} />
             </Canvas>
 
             {!embedded && (

@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react';
 import { 
   Dna, Sparkles, Zap, ChevronDown, ChevronRight, Activity, 
-  Droplet, Brain, Shield, Orbit, Heart, RefreshCw, Layers, TreePine
+  Orbit, Layers, Minimize2, ArrowRight, Eye, Shield, HelpCircle
 } from 'lucide-react';
-import { REACTION_DOMAINS, ReactionItem, getAllReactions } from '../data/reactionData';
-import { DashboardId, useDashboardStore } from '../store/useDashboardStore';
+import { ReactionItem, getAllReactions } from '../data/reactionData';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 interface BiologicalHierarchyProps {
   onAskAI: (question: string) => void;
@@ -28,10 +31,27 @@ interface TaxonomyNode {
   structure: string;
   function: string;
   atomsMolecules: AtomMoleculeDetail[];
-  reactionsKeywords: string[]; // keywords to filter relevant biochemical reactions
+  reactionsKeywords: string[];
+}
+
+interface OrganelleMapData {
+  id: string;
+  name: string;
+  roleTitle: string;
+  structure: string;
+  metabolicRole: string;
+  flowEquation: string; // LaTeX equation
+  inputs: string[];
+  outputs: string[];
+  reactionKeywords: string[];
 }
 
 export function BiologicalHierarchy({ onAskAI, onTriggerReactionInChamber }: BiologicalHierarchyProps) {
+  const [activeTab, setActiveTab] = useState<'map' | 'tree'>('map');
+  const [cellMapType, setCellMapType] = useState<'human' | 'tree'>('human');
+  const [selectedOrganelleId, setSelectedOrganelleId] = useState<string>('mitochondria');
+  const [hoveredOrganelle, setHoveredOrganelle] = useState<string | null>(null);
+
   const [activeGroup, setActiveGroup] = useState<'All' | 'Cell' | 'Tissue' | 'Organ System'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['cell-prokaryotic', 'tissue-muscle', 'system-circulatory']));
@@ -355,7 +375,7 @@ export function BiologicalHierarchy({ onAskAI, onTriggerReactionInChamber }: Bio
       function: 'Produces genetically unique single-copy DNA gamete cells (sperm and egg), coordinates pregnancy development, and drives sex hormones.',
       atomsMolecules: [
         { name: 'Progesterone', formulaOrSymbol: 'C21H30O2', structure: 'A tetracyclic steroid hormone.', function: 'Prepares and maintains the uterine lining cells to support embryo vascular connections.', type: 'molecule' },
-        { name: 'Testosterone', formulaOrSymbol: 'C19H28O2', structure: 'A steroid hormone with a ketone group at C3 and hydroxyl group at C17.', function: 'Triggers male muscle muscle cell protein synthesis and spermatogenesis pathways.', type: 'molecule' }
+        { name: 'Testosterone', formulaOrSymbol: 'C19H28O2', structure: 'A steroid hormone with a ketone group at C3 and hydroxyl group at C17.', function: 'Testosterone initiates chemical pathways that trigger muscle cell protein synthesis and spermatogenesis pathways.', type: 'molecule' }
       ],
       reactionsKeywords: ['reproductive', 'testosterone', 'progesterone', 'ovary', 'gamete', 'pregnancy', 'genetics']
     },
@@ -368,10 +388,80 @@ export function BiologicalHierarchy({ onAskAI, onTriggerReactionInChamber }: Bio
       structure: 'Spans the epidermal skin layer, dermal hair follicles, sebaceous glands, and water sweat glands.',
       function: 'Prevents entry of germs, creates sensory touch maps of surroundings, synthesizes Vitamin D from sun rays, and cools via sweat.',
       atomsMolecules: [
-        { name: 'Cholecalciferol (Vitamin D3)', formulaOrSymbol: 'C27H44O', structure: 'A secosteroid molecule with one open ring.', function: 'Synthesized inside skin cells when exposed to UVB solar light, later converted to calcitriol to regulate calcium absorption.', type: 'molecule' },
+        { name: 'Cholecalciferol (Vitamin D3)', formulaOrSymbol: 'C27H44O', structure: 'A secosteroid molecule with one open ring.', function: 'Synthesized inside skin cells when exposed to UVB solar light, later converted to calcitriol to regulate calcium absorption in the gut.', type: 'molecule' },
         { name: 'Sodium Chloride (Sweat)', formulaOrSymbol: 'NaCl', structure: 'An ionic lattice solid of sodium cations and chloride anions.', function: 'Excreted with water onto the skin to draw latent heat away as the sweat evaporates.', type: 'molecule' }
       ],
       reactionsKeywords: ['integumentary', 'skin', 'sweat', 'evaporation', 'capillary', 'cholecalciferol', 'vitamin']
+    }
+  ], []);
+
+  // Organelles Metabolic Map Data Definition
+  const organelleDataList: OrganelleMapData[] = useMemo(() => [
+    {
+      id: 'mitochondria',
+      name: 'Mitochondria',
+      roleTitle: 'Powerhouse: Krebs Cycle & Electron Transport Chain (ETC)',
+      structure: 'Double membrane organelle. The smooth outer membrane encloses a highly folded inner membrane (Cristae) surrounding the internal fluid matrix.',
+      metabolicRole: 'Mitochondria conduct oxidative phosphorylation. Pyruvate made in glycolysis is oxidized to Acetyl-CoA, degraded via the Citric Acid Cycle (releasing $CO_2$ and charging $NADH$), whose high-energy electrons power an inner-membrane proton ($H^+$) pump. This $H^+$ concentration gradient drives the ATP Synthase rotor to pack molecular phosphate groups onto ADP, generating the bulk of the cell\'s chemical energy.',
+      flowEquation: '$$\\text{Pyruvate} + 3\\text{NAD}^+ + \\text{FAD} + \\text{ADP} + \\text{P}_i + \\text{O}_2 \\xrightarrow{\\text{Matrix / Cristae}} 3\\text{CO}_2 + 3\\text{NADH} + \\text{FADH}_2 + \\text{ATP} \\text{ (net~32~per~glucose)}$$',
+      inputs: ['Pyruvate / Fatty Acids', 'Oxygen (O2) oxygen gas as terminal acceptor', 'ADP + Inorganic Phosphate (Pi)'],
+      outputs: ['Adenosine Triphosphate (ATP - 30 to 32 units)', 'Carbon Dioxide (CO2) metabolic waste gas', 'Water (H2O) synthesized at ETC end'],
+      reactionKeywords: ['mitochondria', 'krebs', 'etc', 'cycle', 'atp', 'succinate', 'respiration']
+    },
+    {
+      id: 'cytosol',
+      name: 'Cytosol (Cytoplasm)',
+      roleTitle: 'Anaerobic Core: Glycolysis pathway',
+      structure: 'Liquid jelly-like intercellular aqueous matrix containing dissolved ions, organic molecules, and a complex network of cytoskeletal scaffolding fibers.',
+      metabolicRole: 'The cytosol is the primary metabolic crucible. It contains all the enzymes required for Glycolysis—an oxygen-independent 10-enzyme cascade that splits a single 6-carbon Glucose molecule into two 3-carbon Pyruvates, yielding an initial thermodynamic cash of 2 net ATP and 2 NADH. It mediates substrate-level phosphorylation and interfaces with mitochondria for fluid carbon exchange.',
+      flowEquation: '$$\\text{C}_6\\text{H}_{12}\\text{O}_6 + 2\\text{NAD}^+ + 2\\text{ADP} + 2\\text{P}_i \\xrightarrow{\\text{Cytosol Enzymes}} 2\\text{Pyruvate} + 2\\text{NADH} + 2\\text{H}^+ + 2\\text{H}_2\\text{O} + 2\\text{ATP}$$',
+      inputs: ['Glucose (C6H12O6)', 'NAD+ Coenzymes', 'ADP + Phosphate (Pi)'],
+      outputs: ['Pyruvate (C3H3O3) to feed mitochondria', 'NADH high-energy electrons carrier', '2 Net ATP immediate energy'],
+      reactionKeywords: ['glycolysis', 'glucose', 'pyruvate', 'atp', 'cytoplasm']
+    },
+    {
+      id: 'chloroplast',
+      name: 'Chloroplast',
+      roleTitle: 'Autotrophic Sugar Factory: Photosynthesis / Calvin Cycle',
+      structure: 'Double outer membrane wrapping rows of stacked thylakoid membranes (Grana) rich in green Chlorophyll pigment, bathed in an aqueous Stroma fluid.',
+      metabolicRole: 'Only present in the **Tree/Plant cell**. Chloroplasts synthesize glucose from solar energy. Inside the thylakoids, chlorophyll absorbs orange-red and blue-violet light photons to split water molecules (photolysis), releasing hydrogen and $O_2$ waste, creating ADP-to-ATP charge. Inside the Stroma, the enzyme Rubisco conducts Carbon Fixation (Calvin Cycle), joining carbon dioxide into glucose chains.',
+      flowEquation: '$$6\\text{CO}_2 + 6\\text{H}_2\\text{O} + \\text{Photons} (h\\nu) \\xrightarrow{\\text{Chlorophyll & Rubisco}} \\text{C}_6\\text{H}_{12}\\text{O}_6 \\text{ (Glucose)} + 6\\text{O}_2$$',
+      inputs: ['Carbon Dioxide (CO2)', 'Water (H2O)', 'Solar Photons (light energy)'],
+      outputs: ['Glucose Sugar (high-density carbon storage)', 'Oxygen Gas (O2) released as vital byproduct'],
+      reactionKeywords: ['photosynthesis', 'calvin', 'chlorophyll', 'light', 'rubisco', 'plant']
+    },
+    {
+      id: 'membrane',
+      name: 'Cell Membrane Portals',
+      roleTitle: 'Selective Portals: Ion Pumps & Transporters',
+      structure: 'Selectively permeable fluid-mosaic phospholipid bilayer studded with receptor glycoproteins and transmembrane protein active channels.',
+      metabolicRole: 'Maintains electrochemical cellular homeostasis. Uses active transports (such as the Sodium-Potassium $Na^+/K^+$ ATPase pump) which consumes 1 ATP to eject 3 Sodium ions and draw in 2 Potassium ions, building a -70mV charge boundary crucial for animal muscle/muscle fibers and nerve tissue reaction. It also hosts GLUT transporters to take glucose inside the cell.',
+      flowEquation: '$$3\\text{Na}^+_{\\text{inside}} + 2\\text{K}^+_{\\text{outside}} + \\text{ATP} + \\text{H}_2\\text{O} \\xrightarrow{Na^+/K^+\\text{ ATPase}} 3\\text{Na}^+_{\\text{outside}} + 2\\text{K}^+_{\\text{inside}} + \\text{ADP} + \\text{P}_i$$',
+      inputs: ['Extracellular Glucose', 'Intercellular Sodium Cations (Na+)', 'ATP fuel'],
+      outputs: ['Intracellular Glucose (for glycolysis)', 'Intercellular Potassium Cations (K+)', 'Electrochemical driving potential (-70mV)'],
+      reactionKeywords: ['sodium', 'potassium', 'membrane', 'pump', 'glut', 'transport']
+    },
+    {
+      id: 'nucleus',
+      name: 'Nucleus',
+      roleTitle: 'Information Vault: Governance & Transcription',
+      structure: 'Enclosed by a double-layered Nuclear Envelope with selective pores. Contains chromatin DNA strands wound tight around histone spool proteins.',
+      metabolicRole: 'The nucleus regulates metabolic speed. It maintains DNA blueprints for all metabolic enzymes (like Rubisco, Hexokinase, or ATP Synthase). When cellular energy is low, transcription pathways synthesize mRNA transcripts of respiratory genetic structures, which travel through nuclear pores to ribosomes to be parsed into active metabolic enzymes.',
+      flowEquation: '$$\\text{DNA Gene} \\xrightarrow{\\text{RNA Polymerase II}} \\text{mRNA Blueprint} \\xrightarrow{\\text{Nuclear Pore}} \\text{Cytosol Ribosome}$$',
+      inputs: ['Nucleoside Triphosphates (ATP, GTP, CTP, UTP)', 'Transcription Signaling Transcription factors'],
+      outputs: ['mRNA templates (for enzyme proteins synthesis)', 'Ribosomal subunits'],
+      reactionKeywords: ['nucleus', 'dna', 'rna', 'transcription', 'chromatin']
+    },
+    {
+      id: 'vacuole',
+      name: 'Lysosome / Central Vacuole',
+      roleTitle: 'Recycling & Turgor: Macro-Decomposition',
+      structure: 'Acidic single-membrane sac ($pH \\sim 5.0$ in animals) or a giant membrane-vault (tonoplast) stretching up to 90% of the interior volume in tree plant cells.',
+      metabolicRole: 'In animal skins (Human model), Lysosomes break down defective mitochondria (mitophagy) using acid hydrolases into amino acid monomers to salvage fuel. In tree trunks (Plantae model), the massive Central Vacuole accumulates potassium solute, absorbing surrounding water by osmosis to balloon outwards. This generates massive Turgor Pressure against the cellulose wall to make wooden tree stems stiff.',
+      flowEquation: '$$\\text{Biopolymer (Starch, Proteins)} + \\text{H}_2\\text{O} \\xrightarrow{\\text{Acid Hydrolases / Hydration}} \\text{Monomers (Glucose, Free Amino Acids)}$$',
+      inputs: ['Autophagic Defective Organelles / Starch polymers', 'Water (H2O)', 'Acidity protons (H+ ion)'],
+      outputs: ['Soluble sugar monomers (for instant glycolysis)', 'Free Amino Acids', 'High Turgor standing force (plants only)'],
+      reactionKeywords: ['lysosome', 'vacuole', 'starch', 'chitin', 'enzyme', 'turgor']
     }
   ], []);
 
@@ -410,211 +500,759 @@ export function BiologicalHierarchy({ onAskAI, onTriggerReactionInChamber }: Bio
     setExpandedNodes(next);
   };
 
+  // Capture selected organelle's metabolic data card
+  const selectedOrganelle = useMemo(() => {
+    let organelle = organelleDataList.find(o => o.id === selectedOrganelleId);
+    // Safety check for animal/plant chloroplast toggle
+    if (organelle?.id === 'chloroplast' && cellMapType === 'human') {
+      return organelleDataList.find(o => o.id === 'mitochondria')!;
+    }
+    return organelle || organelleDataList[0];
+  }, [organelleDataList, selectedOrganelleId, cellMapType]);
+
   // Dynamically hook relevant biochemical reactions from our reaction catalogs
-  const getRelevantReactions = (node: TaxonomyNode): ReactionItem[] => {
+  const getRelevantReactions = (keywords: string[]): ReactionItem[] => {
     const all = getAllReactions();
     return all.filter(rx => {
       const rxText = (rx.name + " " + rx.equation + " " + rx.subCategory + " " + rx.description).toLowerCase();
-      return node.reactionsKeywords.some(kw => rxText.includes(kw.toLowerCase()));
-    }).slice(0, 3); // Return top 3 matched reactions
+      return keywords.some(kw => rxText.includes(kw.toLowerCase()));
+    }).slice(0, 3);
   };
+
+  const getTaxonReactions = (node: TaxonomyNode) => {
+    return getRelevantReactions(node.reactionsKeywords);
+  };
+
+  const organelleMatchedReactions = useMemo(() => {
+    return getRelevantReactions(selectedOrganelle.reactionKeywords);
+  }, [selectedOrganelle]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-[#030305]">
       
-      {/* Search and Category Filter Deck */}
-      <div className="bg-[#050508] border-b border-white/5 p-4 shrink-0 space-y-3">
-        {/* Dynamic Search filter */}
-        <div className="flex items-center bg-[#030305] border border-white/10 px-3 py-1.5 rounded-sm hover:border-cyan-500/30 focus-within:border-cyan-500/60 transition-all shadow-inner">
-          <Dna className="w-3.5 h-3.5 text-cyan-400 mr-2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search cells, tissue structures, organs, or molecules..."
-            className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-[11px] font-mono text-white placeholder:text-white/20 py-0.5"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="text-white/40 hover:text-white/80 text-[10px] font-mono select-none"
-            >
-              ✕
-            </button>
-          )}
+      {/* Prime Header Sub-Tab selector */}
+      <div className="bg-[#050508] border-b border-white/5 px-4 pt-3 flex items-center justify-between gap-4 select-none shrink-0">
+        <div className="flex gap-1">
+          <button
+            onClick={() => setActiveTab('map')}
+            className={`px-3 py-2 text-[9.5px] font-mono tracking-widest uppercase border-t-2 transition-all cursor-pointer ${
+              activeTab === 'map'
+                ? 'border-cyan-400 bg-white/5 text-cyan-200 font-bold'
+                : 'border-transparent text-white/40 hover:text-white/80 hover:bg-white/5'
+            }`}
+          >
+            Cellular Metabolic Map (2D)
+          </button>
+          <button
+            onClick={() => setActiveTab('tree')}
+            className={`px-3 py-2 text-[9.5px] font-mono tracking-widest uppercase border-t-2 transition-all cursor-pointer ${
+              activeTab === 'tree'
+                ? 'border-cyan-400 bg-white/5 text-cyan-200 font-bold'
+                : 'border-transparent text-white/40 hover:text-white/80 hover:bg-white/5'
+            }`}
+          >
+            Organ Taxonomy Tree
+          </button>
         </div>
-
-        {/* Categories Tab selector */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin select-none">
-          {['All', 'Cell', 'Tissue', 'Organ System'].map((grp) => {
-            const isSelected = activeGroup === grp;
-            return (
-              <button
-                key={grp}
-                onClick={() => setActiveGroup(grp as any)}
-                className={`px-2.5 py-1 rounded text-[8.5px] font-mono tracking-wider uppercase whitespace-nowrap transition-all border ${
-                  isSelected
-                    ? 'bg-cyan-950/40 border-cyan-500/50 text-cyan-300 font-bold'
-                    : 'bg-black/30 border-white/5 text-white/40 hover:border-cyan-500/20 hover:text-white/80'
-                }`}
-              >
-                {grp === 'All' ? 'ALL LEVELS' : `${grp}s`}
-              </button>
-            );
-          })}
+        <div className="text-[10px] font-mono text-cyan-400/60 hidden md:block select-none font-bold">
+          BIOPHYSICAL CORE // {activeTab === 'map' ? 'METABOLIC SIMULATION' : 'TAXONOMY'}
         </div>
       </div>
 
-      {/* Accordion Tree View */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2.5 scrollbar-thin">
-        {filteredNodes.length === 0 ? (
-          <div className="text-center py-10 font-mono text-xs text-white/30 border border-dashed border-white/5 rounded p-4">
-            No structures or chemical adapters match your search.
-          </div>
-        ) : (
-          filteredNodes.map((node) => {
-            const isExpanded = expandedNodes.has(node.id);
-            const matchedReactions = getRelevantReactions(node);
-
-            return (
-              <div
-                key={node.id}
-                className={`border rounded-sm transition-all duration-200 overflow-hidden ${
-                  isExpanded
-                    ? 'border-cyan-500/30 bg-[#07090b]/40 shadow-[0_0_15px_rgba(34,211,238,0.03)]'
-                    : 'border-white/5 bg-black/20 hover:border-white/10 hover:bg-white/5'
-                }`}
-              >
-                {/* Accordion Header */}
-                <div
-                  onClick={() => toggleNode(node.id)}
-                  className="p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none"
+      {activeTab === 'map' ? (
+        /* Cellular Interactive Metabolic 2D Map */
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 divide-y md:divide-y-0 md:divide-x divide-white/5">
+          
+          {/* Left Block: SVG Interactive cellular diagram */}
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col justify-between bg-[#040407]/40 relative min-h-0 select-none">
+            
+            {/* Top Toggle: Animal Cell vs Plant Cell */}
+            <div className="flex justify-between items-center bg-[#07070b] border border-white/5 p-2 rounded-sm gap-4">
+              <span className="text-[9px] font-mono text-white/40 uppercase">Eukaryotic Cell Model:</span>
+              <div className="flex gap-1.5 font-mono text-[8.5px]">
+                <button
+                  onClick={() => {
+                    setCellMapType('human');
+                    if (selectedOrganelleId === 'chloroplast') setSelectedOrganelleId('mitochondria');
+                  }}
+                  className={`px-2 py-1 rounded transition-all uppercase cursor-pointer border ${
+                    cellMapType === 'human'
+                      ? 'bg-cyan-950/40 border-cyan-500/50 text-cyan-300 font-bold shadow-[0_0_8px_rgba(6,182,212,0.1)]'
+                      : 'bg-black/40 border-white/5 text-white/40 hover:text-white/80'
+                  }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`p-1.5 rounded-sm bg-[#090b0e] border border-white/5 text-cyan-400 ${
-                      isExpanded ? 'border-cyan-500/20 text-cyan-300' : ''
-                    }`}>
-                      {node.group === 'Cell' && <Orbit className="w-3.5 h-3.5" />}
-                      {node.group === 'Tissue' && <Layers className="w-3.5 h-3.5" />}
-                      {node.group === 'Organ System' && <Activity className="w-3.5 h-3.5" />}
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-[11px] font-mono font-bold text-white block truncate leading-relaxed">
-                        {node.title}
-                      </span>
-                      <span className="text-[9px] font-mono text-white/40 block truncate leading-none mt-0.5">
-                        {node.subtitle}
-                      </span>
-                    </div>
-                  </div>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 text-white/30 shrink-0 transition-transform duration-200 ${
-                      isExpanded ? 'rotate-180 text-cyan-400' : ''
-                    }`}
+                  Human Cell (Animalia)
+                </button>
+                <button
+                  onClick={() => setCellMapType('tree')}
+                  className={`px-2 py-1 rounded transition-all uppercase cursor-pointer border ${
+                    cellMapType === 'tree'
+                      ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 font-bold shadow-[0_0_8px_rgba(16,185,129,0.1)]'
+                      : 'bg-black/40 border-white/5 text-white/40 hover:text-white/80'
+                  }`}
+                >
+                  Tree Cell (Plantae)
+                </button>
+              </div>
+            </div>
+
+            {/* Central SVG Interactive Canvas */}
+            <div className="my-auto py-2 flex items-center justify-center relative w-full h-[280px] shrink-0">
+              {/* Decorative coordinate map lines */}
+              <div className="absolute top-2 left-2 text-[7.5px] font-mono text-cyan-500/20 select-none leading-none">
+                SYS_LOC: C0_{cellMapType.toUpperCase()}_EUKARYA<br/>
+                COORD_GRID: 500x400
+              </div>
+
+              {/* Floating indicators for metabolic transport paths */}
+              <div className="absolute bottom-2 left-2 text-[7.5px] font-mono text-white/30 flex items-center gap-2 select-none">
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-cyan-400 rounded-sm animate-ping"></span> Glucose (C6)</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-purple-400 rounded-sm"></span> Pyruvate (C3)</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse"></span> ATP Energy</span>
+              </div>
+
+              <svg 
+                viewBox="0 0 500 400" 
+                className="w-full max-w-[420px] h-full overflow-visible transition-all drop-shadow-[0_0_25px_rgba(0,0,0,0.5)]"
+              >
+                <defs>
+                  {/* Subtle neon glowing filters */}
+                  <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="5" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                  <filter id="glow-heavy" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="8" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+
+                {/* 1. PLANT CELL CELL WALL (Plantae Cellulose Outline) - only shown for plant */}
+                {cellMapType === 'tree' && (
+                  <g className="transition-all animate-fade-in">
+                    <rect 
+                      x="20" y="20" width="460" height="360" rx="35" ry="35"
+                      fill="none" stroke="#10b981" strokeWidth="6" strokeOpacity="0.45"
+                      className="transition-all"
+                    />
+                    <rect 
+                      x="26" y="26" width="448" height="348" rx="29" ry="29"
+                      fill="#0d2a1f" fillOpacity="0.12" stroke="#10b981" strokeWidth="2" strokeOpacity="0.25"
+                    />
+                    {/* Cellulose plant fiber threads representation */}
+                    <path d="M 22,50 L 50,22 M 450,22 L 478,50 M 22,350 L 50,378 M 450,378 L 478,350" stroke="#10b981" strokeWidth="2" strokeOpacity="0.3" strokeDasharray="3 3"/>
+                  </g>
+                )}
+
+                {/* 2. CELL MEMBRANE OVAL (Eukaryotic boundary) */}
+                <ellipse 
+                  cx="250" cy="200" rx="205" ry="155" 
+                  fill={cellMapType === 'human' ? '#070a16' : '#04100c'} 
+                  fillOpacity="0.5"
+                  stroke={cellMapType === 'human' ? '#22d3ee' : '#059669'} 
+                  strokeWidth={cellMapType === 'human' ? '4.5' : '3'} 
+                  className="transition-all duration-300"
+                  strokeDasharray="1500"
+                />
+                
+                {/* 3. FLUID CYTOSOL AREA (Clickable back matrix) */}
+                <ellipse 
+                  cx="250" cy="200" rx="195" ry="145" 
+                  fill="transparent" 
+                  className="cursor-pointer"
+                  onClick={() => setSelectedOrganelleId('cytosol')}
+                  onMouseEnter={() => setHoveredOrganelle('Cytosol / Cytoplasm')}
+                  onMouseLeave={() => setHoveredOrganelle(null)}
+                />
+
+                {/* 4. ACTIVE FLOW LINES (Particles traveling) */}
+                {/* Glucose flow enters top portal, goes to Cytosol for glycolysis breakdown */}
+                <path 
+                  id="path-glucose"
+                  d="M 250,50 L 250,110 Q 230,120 180,125" 
+                  fill="none" stroke="#22d3ee" strokeWidth="2" strokeOpacity="0.25" 
+                  strokeDasharray="4 8"
+                  style={{ animation: 'flowParticle 3s linear infinite' }}
+                />
+                
+                {/* Pyruvate flow goes to Mitochondrian Matrix */}
+                <path 
+                  id="path-pyruvate"
+                  d="M 180,125 Q 260,110 335,115" 
+                  fill="none" stroke="#c084fc" strokeWidth="2.5" strokeOpacity="0.3" 
+                  strokeDasharray="5 10"
+                  style={{ animation: 'flowParticle 2.2s linear infinite' }}
+                />
+
+                {/* ATP outputs flood the cell from mitochondria */}
+                <path 
+                  id="path-atp"
+                  d="M 360,140 Q 280,180 230,200" 
+                  fill="none" stroke="#eab308" strokeWidth="1.8" strokeOpacity="0.3" 
+                  strokeDasharray="4 6"
+                  style={{ animation: 'flowParticle 1.8s linear infinite' }}
+                />
+
+                {cellMapType === 'tree' && (
+                  /* Sunlight hitting chloroplast and releasing Glucose back down to Cytosol */
+                  <path 
+                    d="M 100,50 Q 80,110 110,130" 
+                    fill="none" stroke="#10b981" strokeWidth="2" strokeOpacity="0.35" 
+                    strokeDasharray="4 8"
+                    style={{ animation: 'flowParticle 2s linear infinite' }}
                   />
-                </div>
+                )}
 
-                {/* Extended Details */}
-                {isExpanded && (
-                  <div className="px-4 pb-4 pt-1.5 border-t border-white/5 space-y-4 font-mono text-[9.5px] leading-relaxed select-text animate-fade-in text-white/80">
+                {/* 5. SELECTIVE CELL MEMBRANE PORTAL CODES */}
+                <g 
+                  onClick={() => setSelectedOrganelleId('membrane')}
+                  onMouseEnter={() => setHoveredOrganelle('Cell Membrane Portals')}
+                  onMouseLeave={() => setHoveredOrganelle(null)}
+                  className={`cursor-pointer transition-all duration-300 ${
+                    selectedOrganelleId === 'membrane' ? 'filter inline-block' : 'opacity-85 hover:opacity-100'
+                  }`}
+                  style={{ filter: selectedOrganelleId === 'membrane' ? 'url(#glow)' : 'none' }}
+                >
+                  {/* Gate 1 (Top) */}
+                  <rect x="238" y="25" width="24" height="18" rx="4" fill="#f59e0b" stroke="#fff" strokeWidth="1"/>
+                  <path d="M 250,15 L 250,45" stroke="#f59e0b" strokeWidth="1.5" markerEnd="url(#arrow)" strokeDasharray="3 3"/>
+                  
+                  {/* Gate 2 (Bottom Left) */}
+                  <rect x="75" y="270" width="18" height="24" rx="4" fill="#f59e0b" stroke="#fff" strokeWidth="1" transform="rotate(35 84 282)"/>
+                  
+                  {/* Outer halo */}
+                  <ellipse cx="250" cy="200" rx="205" ry="155" fill="none" stroke="#f59e0b" strokeWidth="4" strokeOpacity={selectedOrganelleId === 'membrane' ? '0.6' : '0.1'} />
+                </g>
+
+                {/* 6. NUCLEUS Blue Core Block */}
+                <g 
+                  onClick={() => setSelectedOrganelleId('nucleus')}
+                  onMouseEnter={() => setHoveredOrganelle('Nucleus')}
+                  onMouseLeave={() => setHoveredOrganelle(null)}
+                  className="cursor-pointer group"
+                >
+                  {/* Nuclear Envelope outer ring */}
+                  <circle 
+                    cx="205" cy="215" r="48" 
+                    fill="#1e3a8a" fillOpacity="0.4"
+                    stroke="#2563eb" strokeWidth={selectedOrganelleId === 'nucleus' ? '3.5' : '2'} 
+                    strokeDasharray="8 4"
+                    className="transition-all duration-300 transform origin-[205px_215px] group-hover:scale-105"
+                  />
+                  {/* Nucleolus dense center */}
+                  <circle 
+                    cx="195" cy="205" r="16" 
+                    fill="#3b82f6" 
+                    filter={selectedOrganelleId === 'nucleus' ? 'url(#glow)' : 'none'}
+                    className="transition-all duration-300"
+                  />
+                  {/* Chromatins visual ribbons inside */}
+                  <path d="M 180,225 Q 200,210 215,225" fill="none" stroke="#60a5fa" strokeWidth="2.5" strokeOpacity="0.6" strokeDasharray="4 4"/>
+                  <path d="M 215,200 Q 225,215 210,230" fill="none" stroke="#60a5fa" strokeWidth="2" strokeOpacity="0.5"/>
+                </g>
+
+                {/* 7. ENDOPLASMIC RETICULUM (Blue channels weaving) */}
+                <path 
+                  d="M 155,205 Q 130,220 115,195 Q 100,170 125,160 M 165,245 Q 140,270 120,250" 
+                  fill="none" stroke="#1d4ed8" strokeWidth="8" strokeLinecap="round" strokeOpacity="0.45"
+                  className="pointer-events-none select-none"
+                />
+                
+                {/* 8. MITOCHONDRIA Bean Core (Neon purple) */}
+                <g 
+                  onClick={() => setSelectedOrganelleId('mitochondria')}
+                  onMouseEnter={() => setHoveredOrganelle('Mitochondria')}
+                  onMouseLeave={() => setHoveredOrganelle(null)}
+                  className="cursor-pointer group"
+                >
+                  {/* Mitochondria 1 (Top-Right) */}
+                  <g transform="translate(355, 125) rotate(-15)">
+                    {/* Outer membrane */}
+                    <ellipse 
+                      cx="0" cy="0" rx="35" ry="20" 
+                      fill="#581c87" fillOpacity="0.4"
+                      stroke="#a855f7" strokeWidth={selectedOrganelleId === 'mitochondria' ? '3' : '1.5'}
+                      className="transition-all duration-300"
+                    />
+                    {/* Folding Inner cristae lines */}
+                    <path 
+                      d="M -25,0 Q -15,-10 -10,0 Q 0,10 5,0 Q 15,-10 25,0" 
+                      fill="none" stroke="#c084fc" strokeWidth="2.5" 
+                      className="transition-all"
+                      filter={selectedOrganelleId === 'mitochondria' ? 'url(#glow)' : 'none'}
+                    />
+                    <path d="M -18,-5 L -10,10 M 2, -7 L 10,8" stroke="#d8b4fe" strokeWidth="1" strokeOpacity="0.5" />
+                  </g>
+
+                  {/* Mitochondria 2 (Bottom-Right) */}
+                  <g transform="translate(340, 275) rotate(25)">
+                    <ellipse 
+                      cx="0" cy="0" rx="31" ry="18" 
+                      fill="#581c87" fillOpacity="0.3"
+                      stroke="#a855f7" strokeWidth={selectedOrganelleId === 'mitochondria' ? '3' : '1.5'}
+                      className="transition-all duration-300"
+                    />
+                    <path d="M -21,0 Q -10,8 0,0 Q 10,-8 21,0" fill="none" stroke="#c084fc" strokeWidth="2.5" />
+                  </g>
+
+                  {/* Dynamic hovering glow on selected mitochondria */}
+                  {selectedOrganelleId === 'mitochondria' && (
+                    <ellipse cx="355" cy="125" rx="42" ry="26" fill="none" stroke="#a855f7" strokeWidth="2" strokeDasharray="3 3" strokeOpacity="0.5" className="animate-spin" style={{ animationDuration: '8s' }}/>
+                  )}
+                </g>
+
+                {/* 9. LYSOSOME Or GIANT VACUOLE depend on type */}
+                {cellMapType === 'human' ? (
+                  /* Lysosome (Animal mode) */
+                  <g
+                    onClick={() => setSelectedOrganelleId('vacuole')}
+                    onMouseEnter={() => setHoveredOrganelle('Lysosome (Hydrolyzer)')}
+                    onMouseLeave={() => setHoveredOrganelle(null)}
+                    className="cursor-pointer group"
+                    transform="translate(295, 200)"
+                  >
+                    <circle 
+                      r="16" 
+                      fill="#78350f" fillOpacity="0.4"
+                      stroke="#f59e0b" strokeWidth={selectedOrganelleId === 'vacuole' ? '3' : '1.5'}
+                      className="transition-all duration-300"
+                    />
+                    {/* Active digestive hydrolyzer dots inside */}
+                    <circle cx="-5" cy="-3" r="1.5" fill="#f59e0b"/>
+                    <circle cx="4" cy="5" r="1" fill="#fbbf24"/>
+                    <circle cx="3" cy="-5" r="1.2" fill="#fff"/>
+                  </g>
+                ) : (
+                  /* Giant Central Vacuole (Plant/Tree mode) */
+                  <g
+                    onClick={() => setSelectedOrganelleId('vacuole')}
+                    onMouseEnter={() => setHoveredOrganelle('Giant Central Vacuole (Turgor)')}
+                    onMouseLeave={() => setHoveredOrganelle(null)}
+                    className="cursor-pointer group"
+                    transform="translate(275, 210) rotate(-10)"
+                  >
+                    {/* Expansive aqueous tonoplast membrane */}
+                    <rect 
+                      x="-45" y="-55" width="95" height="110" rx="35"
+                      fill="#0284c7" fillOpacity="0.18"
+                      stroke="#38bdf8" strokeWidth={selectedOrganelleId === 'vacuole' ? '3.5' : '1.8'}
+                      className="transition-all duration-300"
+                    />
+                    {/* Water molecules / fluid ripples representing 90% space pressure */}
+                    <path d="M -25,25 Q -10,30 20,25" fill="none" stroke="#7dd3fc" strokeWidth="1" strokeOpacity="0.4"/>
+                    <path d="M -15,-20 Q 10,-15 30,-20" fill="none" stroke="#7dd3fc" strokeWidth="1" strokeOpacity="0.4"/>
                     
-                    {/* Structure & Function Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div className="bg-black/40 p-3 rounded-sm border border-white/5 space-y-1">
-                        <span className="text-[7.5px] text-cyan-400 uppercase tracking-wider font-bold block">Physical Structure</span>
-                        <p className="text-white/70 font-sans text-[10px] leading-normal">{node.structure}</p>
-                      </div>
-                      <div className="bg-black/40 p-3 rounded-sm border border-white/5 space-y-1">
-                        <span className="text-[7.5px] text-cyan-400 uppercase tracking-wider font-bold block">Biological Function</span>
-                        <p className="text-white/70 font-sans text-[10px] leading-normal">{node.function}</p>
-                      </div>
-                    </div>
-
-                    {/* All Atoms & Molecules Consist Of Them */}
-                    <div className="space-y-2">
-                      <span className="text-[7.5px] text-cyan-400 uppercase tracking-widest font-bold block select-none">
-                        Atomic &amp; Molecular Composition
-                      </span>
-                      <div className="grid grid-cols-1 gap-2.5">
-                        {node.atomsMolecules.map((am, idx) => (
-                          <div key={idx} className="bg-black/65 border border-white/5 rounded-sm p-3 relative hover:border-cyan-500/10 transition-colors">
-                            <span className={`absolute right-3.5 top-3.5 px-1.5 py-0.5 rounded-full text-[7.5px] uppercase font-bold text-white/50 tracking-wider ${
-                              am.type === 'atom' ? 'bg-cyan-950/40 text-cyan-400 border border-cyan-500/20' : 'bg-purple-950/40 text-purple-400 border border-purple-500/10'
-                            }`}>
-                              {am.type}
-                            </span>
-                            <div className="flex items-baseline gap-1.5 flex-wrap">
-                              <span className="text-[10px] text-white font-bold">{am.name}</span>
-                              <span className="text-[9.5px] text-cyan-300 font-bold bg-[#090c10] px-1.5 py-0.5 rounded-sm border border-white/5">{am.formulaOrSymbol}</span>
-                            </div>
-                            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-[9px] text-white/60">
-                              <div>
-                                <span className="font-bold text-white/30 text-[8px] uppercase block">Structure:</span>
-                                <span className="font-sans leading-normal">{am.structure}</span>
-                              </div>
-                              <div>
-                                <span className="font-bold text-white/30 text-[8px] uppercase block">Function:</span>
-                                <span className="font-sans leading-normal">{am.function}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Integrated Biochemical Reactions */}
-                    {matchedReactions.length > 0 && (
-                      <div className="space-y-2">
-                        <span className="text-[7.5px] text-cyan-400 uppercase tracking-widest font-bold block select-none">
-                          Involved Biochemical Reactions
-                        </span>
-                        <div className="space-y-2">
-                          {matchedReactions.map((rx) => (
-                            <div key={rx.id} className="bg-black/30 hover:bg-black/50 border border-white/5 rounded-sm p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors">
-                              <div className="min-w-0">
-                                <div className="flex items-baseline gap-2 flex-wrap">
-                                  <span className="text-[10px] text-white font-bold">{rx.name}</span>
-                                  <span className="text-[8.5px] text-purple-400 uppercase font-semibold text-[7.5px] tracking-wider">({rx.subCategory})</span>
-                                </div>
-                                <span className="text-[9px] text-cyan-300 font-bold font-mono mt-1 block select-all bg-black/60 px-2 py-1 rounded-sm border border-white/5 w-fit">
-                                  {rx.equation}
-                                </span>
-                                <p className="text-[9px] text-white/50 font-sans mt-1 leading-normal">{rx.description}</p>
-                              </div>
-                              {onTriggerReactionInChamber && (
-                                <button
-                                  onClick={() => onTriggerReactionInChamber(rx)}
-                                  className="shrink-0 self-end md:self-center bg-cyan-950/30 border border-cyan-500/25 hover:bg-cyan-950/60 hover:border-cyan-400 text-cyan-300 font-mono text-[8.5px] uppercase tracking-wider py-1 px-2.5 rounded-sm transition-all focus:outline-none flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Zap className="w-2.5 h-2.5 fill-cyan-400" /> Trigger in Chamber
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                    {/* High internal pressure outward forces visual arrow indicator */}
+                    {selectedOrganelleId === 'vacuole' && (
+                      <g stroke="#0ea5e9" strokeWidth="1.5" fill="none" className="animate-pulse">
+                        <path d="M 0,-15 L 0,-35 M -5,-30 L 0,-35 L 5,-30"/>
+                        <path d="M 0,15 L 0,35 M -5,30 L 0,35 L 5,30"/>
+                        <path d="M -15,0 L -30,0 M -25,-5 L -30,0 L -25,5"/>
+                        <path d="M 15,0 L 30,0 M 25,-5 L 30,0 L 25,5"/>
+                      </g>
                     )}
+                  </g>
+                )}
 
-                    {/* Dynamic AI Exploration button for complete lessons */}
-                    <div className="pt-2 select-none">
-                      <button
-                        onClick={() => {
-                          const query = `Provide a full atom, cell, and human-experience lesson about ${node.title}. Explain the detailed molecular architecture of its components (such as ${node.atomsMolecules.map(am => am.name).join(', ')}) and write all relevant biochemical equations using LaTeX.`;
-                          onAskAI(query);
-                        }}
-                        className="w-full py-2 rounded-sm bg-cyan-950/15 border border-cyan-500/25 hover:bg-cyan-950/30 text-cyan-300 font-mono text-[9px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-[0_0_12px_rgba(6,182,212,0.12)]"
-                      >
-                        <Sparkles className="w-3 h-3 text-cyan-400" /> Consult Spacetime AI on {node.name}
-                      </button>
-                    </div>
+                {/* 10. CHLOROPLAST autotrophic sugar harvesters - Plantae exclusive */}
+                {cellMapType === 'tree' && (
+                  <g 
+                    onClick={() => setSelectedOrganelleId('chloroplast')}
+                    onMouseEnter={() => setHoveredOrganelle('Chloroplast')}
+                    onMouseLeave={() => setHoveredOrganelle(null)}
+                    className="cursor-pointer group animate-fade-in"
+                  >
+                    {/* Chloroplast 1 (Top-Left) */}
+                    <g transform="translate(125, 110) rotate(15)">
+                      <ellipse 
+                        cx="0" cy="0" rx="35" ry="20" 
+                        fill="#064e3b" fillOpacity="0.45"
+                        stroke="#10b981" strokeWidth={selectedOrganelleId === 'chloroplast' ? '3.5' : '1.5'}
+                        className="transition-all duration-300"
+                      />
+                      {/* Thylakoids piles representation (stacked coins) */}
+                      <rect x="-18" y="-8" width="9" height="15" rx="1.5" fill="#34d399" stroke="#10b981" strokeWidth="0.5"/>
+                      <rect x="-4" y="-11" width="9" height="18" rx="1.5" fill="#34d399" stroke="#10b981" strokeWidth="0.5"/>
+                      <rect x="10" y="-7" width="9" height="14" rx="1.5" fill="#34d399" stroke="#10b981" strokeWidth="0.5"/>
+                    </g>
 
+                    {/* Chloroplast 2 (Bottom-Left) */}
+                    <g transform="translate(120, 290) rotate(-20)">
+                      <ellipse 
+                        cx="0" cy="0" rx="32" ry="18" 
+                        fill="#064e3b" fillOpacity="0.35"
+                        stroke="#10b981" strokeWidth={selectedOrganelleId === 'chloroplast' ? '3.5' : '1.5'}
+                        className="transition-all duration-300"
+                      />
+                      <rect x="-15" y="-6" width="8" height="12" rx="1" fill="#34d399"/>
+                      <rect x="-2" y="-10" width="8" height="16" rx="1" fill="#34d399"/>
+                      <rect x="11" y="-5" width="8" height="10" rx="1" fill="#34d399"/>
+                    </g>
+                  </g>
+                )}
+
+                {/* 11. CYTOSOL GLOW SPOT (Hexagonal Glycolysis target) */}
+                <g 
+                  onClick={() => setSelectedOrganelleId('cytosol')}
+                  onMouseEnter={() => setHoveredOrganelle('Cytosol / Glycolysis')}
+                  onMouseLeave={() => setHoveredOrganelle(null)}
+                  className="cursor-pointer group"
+                  transform="translate(160, 135)"
+                >
+                  <polygon 
+                    points="0,-12 11,-5 11,8 0,15 -11,8 -11,-5" 
+                    fill="#155e75" fillOpacity="0.4"
+                    stroke="#22d3ee" strokeWidth={selectedOrganelleId === 'cytosol' ? '3' : '1.5'}
+                    className="transition-all duration-300"
+                    filter={selectedOrganelleId === 'cytosol' ? 'url(#glow)' : 'none'}
+                  />
+                  <circle r="4" fill="#06b6d4" className="animate-ping" style={{ animationDuration: '3s' }}/>
+                </g>
+
+                {/* Radar target outline for currently hovered or selected organelle */}
+                {selectedOrganelleId && (
+                  <g className="pointer-events-none">
+                    {selectedOrganelleId === 'mitochondria' && <circle cx="355" cy="125" r="41" fill="none" stroke="#c084fc" strokeWidth="1" strokeDasharray="4 4" />}
+                    {selectedOrganelleId === 'cytosol' && <circle cx="160" cy="135" r="22" fill="none" stroke="#22d3ee" strokeWidth="1" strokeDasharray="4 4" />}
+                    {selectedOrganelleId === 'nucleus' && <circle cx="205" cy="215" r="54" fill="none" stroke="#60a5fa" strokeWidth="1" strokeDasharray="4 4" />}
+                    {selectedOrganelleId === 'vacuole' && cellMapType === 'human' && <circle cx="295" cy="200" r="22" fill="none" stroke="#fbbf24" strokeWidth="1" strokeDasharray="4 4" />}
+                    {selectedOrganelleId === 'vacuole' && cellMapType === 'tree' && <circle cx="275" cy="210" r="70" fill="none" stroke="#38bdf8" strokeWidth="1" strokeDasharray="4 4" />}
+                    {selectedOrganelleId === 'chloroplast' && cellMapType === 'tree' && <circle cx="125" cy="110" r="41" fill="none" stroke="#34d399" strokeWidth="1" strokeDasharray="4 4" />}
+                  </g>
+                )}
+              </svg>
+
+              {/* Float-over Radar Tooltip HUD */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                {hoveredOrganelle ? (
+                  <div className="bg-[#050508]/90 border border-cyan-500/30 px-3 py-1 text-[9px] font-mono rounded text-cyan-300 animate-pulse tracking-widest uppercase">
+                    TARGET: {hoveredOrganelle}
+                  </div>
+                ) : (
+                  <div className="bg-[#030306]/60 border border-white/5 px-3 py-1 text-[8.5px] font-mono rounded text-white/30 lowercase select-none">
+                    hover structures on the cell radar map
                   </div>
                 )}
               </div>
-            );
-          })
-        )}
-      </div>
+            </div>
+
+            {/* Quick Map Guide card */}
+            <div className="bg-[#07070a] border border-white/5 p-3 rounded-sm text-[9.5px] font-mono leading-relaxed text-white/50">
+              <span className="text-white/80 font-bold block mb-1">💡 Real-time Cellular Energy Pathways:</span>
+              <p className="font-sans text-[10px]">
+                Click on any highlighted cellular target (Portals, Glycolysis, Nucleus, or the Mitochondria/Chloroplast) to inspect their metabolic role. Watch the animated streams: Glucose <span className="text-cyan-400">●</span> breaks down inside Cytosol to Pyruvate <span className="text-purple-400">●</span>, fueling the Mitochondria to output massive ATP <span className="text-yellow-400">●</span> energy.
+              </p>
+            </div>
+
+          </div>
+
+          {/* Right Block: Metabolic Inspector & Reaction Catalyst */}
+          <div className="w-full md:w-[280px] bg-[#050508]/80 flex flex-col overflow-hidden min-h-0 divide-y divide-white/5 shrink-0 select-text">
+            
+            {/* Inspector Profile Header */}
+            <div className="p-4 bg-[#07070b]/60 space-y-1">
+              <div className="flex justify-between items-start gap-1">
+                <span className="text-[8px] font-mono text-cyan-400 uppercase tracking-widest font-bold">Organelle Inspector //</span>
+                <span className="text-[7.5px] font-mono bg-cyan-950/40 text-cyan-300 border border-cyan-500/20 px-1 py-0.5 rounded-sm uppercase font-bold tracking-wider select-none">Mode: {cellMapType}</span>
+              </div>
+              <h2 className="text-xs font-mono font-bold text-white uppercase tracking-wider">{selectedOrganelle.name}</h2>
+              <span className="text-[9px] font-mono text-cyan-300/80 font-semibold">{selectedOrganelle.roleTitle}</span>
+            </div>
+
+            {/* Comprehensive Descriptions */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-[9px] leading-relaxed scrollbar-thin">
+              
+              {/* Physical structure details */}
+              <div className="space-y-1">
+                <span className="text-[7.5px] text-white/30 uppercase tracking-widest block select-none">Physical Structure</span>
+                <p className="text-white/70 font-sans text-[10px] leading-normal">{selectedOrganelle.structure}</p>
+              </div>
+
+              {/* Metabolic energy role description */}
+              <div className="space-y-1">
+                <span className="text-[7.5px] text-white/30 uppercase tracking-widest block select-none">Metabolic Energy Role</span>
+                <p className="text-white/70 font-sans text-[10px] leading-normal">{selectedOrganelle.metabolicRole}</p>
+              </div>
+
+              {/* Thermochemical Input vs Output Lists */}
+              <div className="grid grid-cols-2 gap-2 text-[8.5px]">
+                <div className="bg-black/40 border border-white/5 p-2 rounded-sm space-y-1">
+                  <span className="text-[#38bdf8] font-bold block select-none">⬇ INPUTS</span>
+                  <ul className="list-disc pl-3 text-white/60 space-y-0.5 font-sans leading-none">
+                    {selectedOrganelle.inputs.map((inp, i) => (
+                      <li key={i} className="text-[9.5px] truncate" title={inp}>{inp}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="bg-black/40 border border-white/5 p-2 rounded-sm space-y-1">
+                  <span className="text-[#fbbf24] font-bold block select-none">⬆ OUTPUTS</span>
+                  <ul className="list-disc pl-3 text-white/60 space-y-0.5 font-sans leading-none">
+                    {selectedOrganelle.outputs.map((out, i) => (
+                      <li key={i} className="text-[9.5px] truncate" title={out}>{out}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* KaTeX Thermodynamic Flow Equation */}
+              <div className="space-y-1.5 selection:bg-cyan-500/20">
+                <span className="text-[7.5px] text-white/30 uppercase tracking-widest block select-none">Thermodynamic Equation</span>
+                <div className="bg-black/60 border border-white/5 p-2.5 rounded-sm overflow-x-auto text-white leading-relaxed markdown-body">
+                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {selectedOrganelle.flowEquation}
+                  </ReactMarkdown>
+                </div>
+              </div>
+
+              {/* Matched biochemical reactions */}
+              {organelleMatchedReactions.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[7.5px] text-cyan-400 uppercase tracking-widest block select-none font-bold">Matched Reactions in System</span>
+                  <div className="space-y-2 select-none">
+                    {organelleMatchedReactions.map((rx) => (
+                      <div key={rx.id} className="bg-black/30 border border-white/5 p-2.5 rounded-sm hover:border-cyan-500/10 transition-colors space-y-1.5">
+                        <span className="text-[9.5px] text-white font-bold block leading-none">{rx.name}</span>
+                        <code className="text-[8px] text-cyan-300 font-bold bg-black/50 px-1 py-0.5 rounded border border-white/5 block select-all">
+                          {rx.equation}
+                        </code>
+                        {onTriggerReactionInChamber && (
+                          <button
+                            onClick={() => onTriggerReactionInChamber(rx)}
+                            className="w-full bg-cyan-950/30 border border-cyan-500/25 hover:bg-cyan-950/60 hover:border-cyan-400 text-cyan-300 font-mono text-[8px] uppercase tracking-wider py-1 rounded transition-all flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Zap className="w-2 h-2 fill-cyan-400" /> Trigger in Chamber
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* AI Probe buttons for deep metabolic exploration */}
+            <div className="p-4 bg-[#07070c]/50">
+              <button
+                onClick={() => {
+                  const query = `Provide an advanced thermodynamic molecular lesson focusing on ${selectedOrganelle.name} (${selectedOrganelle.roleTitle}) metabolic pathways. Clearly formulate all biochemical cycles (such as Glycolysis, Krebs Cycle, or Calvin Cycle) using complete LaTeX balanced chemical math equations, listing inputs, outputs, enthalpy levels, and ATP equivalents.`;
+                  onAskAI(query);
+                }}
+                className="w-full py-2 bg-cyan-950/15 border border-cyan-500/25 hover:bg-cyan-950/30 text-cyan-300 font-mono text-[9px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-[0_0_12px_rgba(6,182,212,0.12)]"
+              >
+                <Sparkles className="w-3 h-3 text-cyan-400" /> Deep AI Quiz on {selectedOrganelle.name}
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+      ) : (
+        /* Taxonomy Tree list of elements */
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-[#030305]">
+          
+          {/* Taxonomy filter deck */}
+          <div className="bg-[#050508] border-b border-white/5 p-4 shrink-0 space-y-3 select-none">
+            {/* Dynamic Search filter */}
+            <div className="flex items-center bg-[#030305] border border-white/10 px-3 py-1.5 rounded-sm hover:border-cyan-500/30 focus-within:border-cyan-500/60 transition-all shadow-inner">
+              <Dna className="w-3.5 h-3.5 text-cyan-400 mr-2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search cells, tissue structures, organs, or molecules..."
+                className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-[11px] font-mono text-white placeholder:text-white/20 py-0.5"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="text-white/40 hover:text-white/80 text-[10px] font-mono select-none"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Categories tab */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+              {['All', 'Cell', 'Tissue', 'Organ System'].map((grp) => {
+                const isSelected = activeGroup === grp;
+                return (
+                  <button
+                    key={grp}
+                    onClick={() => setActiveGroup(grp as any)}
+                    className={`px-2.5 py-1 rounded text-[8.5px] font-mono tracking-wider uppercase whitespace-nowrap transition-all border cursor-pointer ${
+                      isSelected
+                        ? 'bg-cyan-950/40 border-cyan-500/50 text-cyan-300 font-bold'
+                        : 'bg-black/30 border-white/5 text-white/40 hover:border-cyan-500/20 hover:text-white/80'
+                    }`}
+                  >
+                    {grp === 'All' ? 'ALL LEVELS' : `${grp}s`}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Accordion List */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-2.5 scrollbar-thin">
+            {filteredNodes.length === 0 ? (
+              <div className="text-center py-10 font-mono text-xs text-white/30 border border-dashed border-white/5 rounded p-4">
+                No structures or chemical adapters match your search.
+              </div>
+            ) : (
+              filteredNodes.map((node) => {
+                const isExpanded = expandedNodes.has(node.id);
+                const matchedReactions = getTaxonReactions(node);
+
+                return (
+                  <div
+                    key={node.id}
+                    className={`border rounded-sm transition-all duration-200 overflow-hidden ${
+                      isExpanded
+                        ? 'border-cyan-500/30 bg-[#07090b]/40 shadow-[0_0_15px_rgba(34,211,238,0.03)]'
+                        : 'border-white/5 bg-black/20 hover:border-white/10 hover:bg-white/5'
+                    }`}
+                  >
+                    {/* Header */}
+                    <div
+                      onClick={() => toggleNode(node.id)}
+                      className="p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`p-1.5 rounded-sm bg-[#090b0e] border border-white/5 text-cyan-400 ${
+                          isExpanded ? 'border-cyan-500/20 text-cyan-300' : ''
+                        }`}>
+                          {node.group === 'Cell' && <Orbit className="w-3.5 h-3.5" />}
+                          {node.group === 'Tissue' && <Layers className="w-3.5 h-3.5" />}
+                          {node.group === 'Organ System' && <Activity className="w-3.5 h-3.5" />}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-mono font-bold text-white block truncate leading-relaxed">
+                            {node.title}
+                          </span>
+                          <span className="text-[9px] font-mono text-white/40 block truncate leading-none mt-0.5">
+                            {node.subtitle}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 text-white/30 shrink-0 transition-transform duration-200 ${
+                          isExpanded ? 'rotate-180 text-cyan-400' : ''
+                        }`}
+                      />
+                    </div>
+
+                    {/* Extended Details */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 pt-1.5 border-t border-white/5 space-y-4 font-mono text-[9.5px] leading-relaxed select-text animate-fade-in text-white/80">
+                        
+                        {/* Structure & Function */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="bg-black/40 p-3 rounded-sm border border-white/5 space-y-1">
+                            <span className="text-[7.5px] text-cyan-400 uppercase tracking-wider font-bold block select-none">Physical Structure</span>
+                            <p className="text-white/70 font-sans text-[10px] leading-normal">{node.structure}</p>
+                          </div>
+                          <div className="bg-black/40 p-3 rounded-sm border border-white/5 space-y-1">
+                            <span className="text-[7.5px] text-cyan-400 uppercase tracking-wider font-bold block select-none">Biological Function</span>
+                            <p className="text-white/70 font-sans text-[10px] leading-normal">{node.function}</p>
+                          </div>
+                        </div>
+
+                        {/* Atomic Composition */}
+                        <div className="space-y-2">
+                          <span className="text-[7.5px] text-cyan-400 uppercase tracking-widest font-bold block select-none">
+                            Atomic &amp; Molecular Composition
+                          </span>
+                          <div className="grid grid-cols-1 gap-2.5">
+                            {node.atomsMolecules.map((am, idx) => (
+                              <div key={idx} className="bg-black/65 border border-white/5 rounded-sm p-3 relative hover:border-cyan-500/10 transition-colors">
+                                <span className={`absolute right-3.5 top-3.5 px-1.5 py-0.5 rounded-full text-[7.5px] uppercase font-bold tracking-wider select-none ${
+                                  am.type === 'atom' ? 'bg-cyan-950/40 text-cyan-400 border border-cyan-500/20' : 'bg-purple-950/40 text-purple-400 border border-purple-500/10'
+                                }`}>
+                                  {am.type}
+                                </span>
+                                <div className="flex items-baseline gap-1.5 flex-wrap">
+                                  <span className="text-[10px] text-white font-bold">{am.name}</span>
+                                  <span className="text-[9.5px] text-cyan-300 font-bold bg-[#090c10] px-1.5 py-0.5 rounded-sm border border-white/5">{am.formulaOrSymbol}</span>
+                                </div>
+                                <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-[9px] text-white/60">
+                                  <div>
+                                    <span className="font-bold text-white/30 text-[8px] uppercase block select-none">Structure:</span>
+                                    <span className="font-sans leading-normal">{am.structure}</span>
+                                  </div>
+                                  <div>
+                                    <span className="font-bold text-white/30 text-[8px] uppercase block select-none">Function:</span>
+                                    <span className="font-sans leading-normal">{am.function}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Integrated Reactions */}
+                        {matchedReactions.length > 0 && (
+                          <div className="space-y-2">
+                            <span className="text-[7.5px] text-cyan-400 uppercase tracking-widest font-bold block select-none">
+                              Involved Biochemical Reactions
+                            </span>
+                            <div className="space-y-2">
+                              {matchedReactions.map((rx) => (
+                                <div key={rx.id} className="bg-black/30 hover:bg-black/50 border border-white/5 rounded-sm p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors">
+                                  <div className="min-w-0">
+                                    <div className="flex items-baseline gap-2 flex-wrap">
+                                      <span className="text-[10px] text-white font-bold">{rx.name}</span>
+                                      <span className="text-[8.5px] text-purple-400 uppercase font-semibold text-[7.5px] tracking-wider">({rx.subCategory})</span>
+                                    </div>
+                                    <span className="text-[9px] text-cyan-300 font-bold font-mono mt-1 block select-all bg-black/60 px-2 py-1 rounded-sm border border-white/5 w-fit">
+                                      {rx.equation}
+                                    </span>
+                                    <p className="text-[9px] text-white/50 font-sans mt-1 leading-normal">{rx.description}</p>
+                                  </div>
+                                  {onTriggerReactionInChamber && (
+                                    <button
+                                      onClick={() => onTriggerReactionInChamber(rx)}
+                                      className="shrink-0 self-end md:self-center bg-cyan-950/30 border border-cyan-500/25 hover:bg-cyan-950/60 hover:border-cyan-400 text-cyan-300 font-mono text-[8.5px] uppercase tracking-wider py-1 px-2.5 rounded-sm transition-all focus:outline-none flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Zap className="w-2.5 h-2.5 fill-cyan-400" /> Trigger in Chamber
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* AI Lesson */}
+                        <div className="pt-2 select-none">
+                          <button
+                            onClick={() => {
+                              const query = `Provide a full atom, cell, and human-experience lesson about ${node.title}. Explain the detailed molecular architecture of its components (such as ${node.atomsMolecules.map(am => am.name).join(', ')}) and write all relevant biochemical equations using LaTeX.`;
+                              onAskAI(query);
+                            }}
+                            className="w-full py-2 rounded-sm bg-cyan-950/15 border border-cyan-500/25 hover:bg-cyan-950/30 text-cyan-300 font-mono text-[9px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-[0_0_12px_rgba(6,182,212,0.12)]"
+                          >
+                            <Sparkles className="w-3 h-3 text-cyan-400" /> Consult Spacetime AI on {node.name}
+                          </button>
+                        </div>
+
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+        </div>
+      )}
 
     </div>
   );
