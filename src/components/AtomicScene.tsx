@@ -526,8 +526,8 @@ const EnergeticForceField = ({
     if (isBroken) return;
     const t = clock.getElapsedTime() * 15;
     const segments = 32;
-    const pts1 = [];
-    const pts2 = [];
+    const pts1: number[] = [];
+    const pts2: number[] = [];
 
     // Wave amplitude peaks when compressed (repulsion stress), stretches thin when far
     const amp = distanceScale < 1.0 
@@ -542,16 +542,16 @@ const EnergeticForceField = ({
       // Helix 1
       const y1 = THREE.MathUtils.lerp(pos1[1], pos2[1], pct) + Math.cos(baseAngle) * amp;
       const z1 = THREE.MathUtils.lerp(pos1[2], pos2[2], pct) + Math.sin(baseAngle) * amp;
-      pts1.push(new THREE.Vector3(x, y1, z1));
+      pts1.push(x, y1, z1);
 
       // Helix 2 (180 degrees phase offset)
       const y2 = THREE.MathUtils.lerp(pos1[1], pos2[1], pct) + Math.cos(baseAngle + Math.PI) * amp;
       const z2 = THREE.MathUtils.lerp(pos1[2], pos2[2], pct) + Math.sin(baseAngle + Math.PI) * amp;
-      pts2.push(new THREE.Vector3(x, y2, z2));
+      pts2.push(x, y2, z2);
     }
 
-    if (line1Ref.current) line1Ref.current.setPoints(pts1);
-    if (line2Ref.current) line2Ref.current.setPoints(pts2);
+    if (line1Ref.current?.geometry) line1Ref.current.geometry.setPositions(pts1);
+    if (line2Ref.current?.geometry) line2Ref.current.geometry.setPositions(pts2);
   });
 
   if (isBroken) {

@@ -1004,7 +1004,7 @@ export function BiologicalHierarchy({ onAskAI, onTriggerReactionInChamber }: Bio
               <div className="space-y-1.5 selection:bg-cyan-500/20">
                 <span className="text-[7.5px] text-white/30 uppercase tracking-widest block select-none">Thermodynamic Equation</span>
                 <div className="bg-black/60 border border-white/5 p-2.5 rounded-sm overflow-x-auto text-white leading-relaxed markdown-body">
-                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}>
                     {selectedOrganelle.flowEquation}
                   </ReactMarkdown>
                 </div>
