@@ -2,6 +2,7 @@ import React, { useRef, useMemo, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html, Grid, Line, Float } from '@react-three/drei';
 import * as THREE from 'three';
+import * as d3 from 'd3';
 import { useDashboardStore, DashboardId } from '../store/useDashboardStore';
 import { useAtomicStore } from '../store/useAtomicStore';
 import { ELEMENTS } from '../data/elements';
@@ -17,6 +18,7 @@ import {
   createProceduralUranusTexture,
   createProceduralNeptuneTexture
 } from '../utils/proceduralTextures';
+import { AtmosphereShaderMaterial, StarShaderMaterial } from './RealisticShaders';
 
 export const ATOM_IDS: DashboardId[] = [
   'hydrogen', 'helium', 'lithium', 'beryllium', 'boron',
@@ -383,6 +385,179 @@ const OrbitalMechanics = () => {
 
 // Sub-components:
 
+const GeodesicParticle = ({ radius, mass, color, index, onDragDist }: { radius: number, mass: number, color: string, index: number, onDragDist?: (d: number) => void }) => {
+  const ref = useRef<THREE.Mesh>(null);
+  const wellScale = useMemo(() => d3.scalePow().exponent(0.3).domain([0, radius]).range([mass, 0]), [mass, radius]);
+  
+  const orbitRadius = useMemo(() => radius * 0.2 + (index * radius * 0.08), [radius, index]);
+  const speed = useMemo(() => 0.5 + (1 / orbitRadius) * 20, [orbitRadius]);
+  const offset = useMemo(() => index * Math.PI * 1.5, [index]);
+
+  const [isDragging, setIsDragging] = useState(false);
+  const { camera, pointer, raycaster } = useThree();
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+
+  useFrame((state) => {
+    if (isDragging && ref.current && ref.current.parent) {
+      raycaster.setFromCamera(pointer, camera);
+      const intersect = new THREE.Vector3();
+      
+      const parentPos = new THREE.Vector3();
+      ref.current.parent.getWorldPosition(parentPos);
+      plane.set(new THREE.Vector3(0, 1, 0), -parentPos.y); 
+
+      raycaster.ray.intersectPlane(plane, intersect);
+      if (intersect) {
+        const localPos = intersect.clone();
+        ref.current.parent.worldToLocal(localPos);
+        const distance = Math.sqrt(localPos.x * localPos.x + localPos.z * localPos.z);
+        if (onDragDist) onDragDist(distance);
+        
+        if (distance > radius * 1.5) {
+             localPos.multiplyScalar((radius * 1.5) / distance);
+        }
+        const y = -wellScale(Math.min(distance, radius));
+        ref.current.position.set(localPos.x, y, localPos.z);
+      }
+    } else if (ref.current) {
+      const t = state.clock.elapsedTime * speed + offset;
+      const x = Math.cos(t) * orbitRadius;
+      const z = Math.sin(t) * orbitRadius;
+      const y = -wellScale(orbitRadius);
+      ref.current.position.set(x, y, z);
+    }
+  });
+
+  useEffect(() => {
+    // Add cursor style for drag affordance
+    document.body.style.cursor = isDragging ? 'grabbing' : 'grab';
+    return () => {
+      document.body.style.cursor = 'default';
+    };
+  }, [isDragging]);
+
+  return (
+    <mesh 
+      ref={ref}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        setIsDragging(true);
+        if ((e.target as any).setPointerCapture) (e.target as any).setPointerCapture(e.pointerId);
+      }}
+      onPointerUp={(e) => {
+        e.stopPropagation();
+        setIsDragging(false);
+        if ((e.target as any).releasePointerCapture) (e.target as any).releasePointerCapture(e.pointerId);
+        if (onDragDist) onDragDist(-1);
+      }}
+      onPointerOut={(e) => {
+        if (!isDragging) document.body.style.cursor = 'default';
+      }}
+      onPointerOver={(e) => {
+        // Only set grab if we're not grabbing
+        if (!isDragging) document.body.style.cursor = 'grab';
+      }}
+    >
+      <sphereGeometry args={[radius * 0.015, 8, 8]} />
+      <meshBasicMaterial color={isDragging ? "#ffffff" : color} transparent opacity={isDragging ? 1 : 0.8} />
+    </mesh>
+  );
+};
+
+export const GravityField = ({ id, mass, radius, color = '#38bdf8' }: { id: DashboardId, mass: number, radius: number, color?: string }) => {
+  const { activeDashboardId } = useDashboardStore();
+  const isActive = activeDashboardId === id;
+  const [dragDist, setDragDist] = useState(-1);
+
+  const dynamicMass = useMemo(() => {
+    if (dragDist < 0) return mass;
+    const ratio = Math.max(0, Math.min(1, dragDist / radius));
+    return mass + (mass * 3.5 * (1 - ratio)); // significantly increase mass for sharper dip when close
+  }, [mass, radius, dragDist]);
+
+  const points = useMemo(() => {
+    // Generate geodesic curves using d3
+    const curves: THREE.Vector3[][] = [];
+    const numLines = 60; // Tightening the mesh resolution
+    const numPoints = 65; 
+    
+    // Using d3 scale for spacetime curvature depth
+    // Increase the exponent to make the dip sharper when dynamicMass is higher
+    const dynamicExponent = dragDist >= 0 ? 0.3 + (1 - Math.max(0, Math.min(1, dragDist / radius))) * 0.5 : 0.3;
+    const wellScale = d3.scalePow().exponent(dynamicExponent).domain([0, radius]).range([dynamicMass, 0]);
+
+    // Bunch lines towards the center using a power scale
+    // As drag occurs closer to the center, we increase the bunching effect
+    const distExponent = dragDist >= 0 ? 1.5 + (1 - Math.max(0, Math.min(1, dragDist / radius))) * 0.8 : 1.3;
+    const distScale = d3.scalePow().exponent(distExponent).domain([0, 1]).range([0, radius]);
+
+    // Radial lines
+    for (let i = 0; i < numLines; i++) {
+        const line: THREE.Vector3[] = [];
+        const angle = (i / numLines) * Math.PI * 2;
+        for (let j = 1; j <= numPoints; j++) {
+           const t = j / numPoints;
+           let r = distScale(t);
+           // Add a hole in the middle for the object
+           if (j === 1) r = radius * 0.02;
+           const x = Math.cos(angle) * r;
+           const z = Math.sin(angle) * r;
+           const yOffset = -wellScale(r);
+           line.push(new THREE.Vector3(x, yOffset, z));
+        }
+        curves.push(line);
+    }
+    
+    // Circular concentric rings
+    const numRings = 28; // Tightened mesh for rings
+    for (let rIdx = 1; rIdx <= numRings; rIdx++) {
+       const line: THREE.Vector3[] = [];
+       const t = rIdx / numRings;
+       const r = distScale(t);
+       const yOffset = -wellScale(r);
+       for (let i = 0; i <= numLines; i++) {
+          const angle = (i / numLines) * Math.PI * 2;
+          const x = Math.cos(angle) * r;
+          const z = Math.sin(angle) * r;
+          line.push(new THREE.Vector3(x, yOffset, z));
+       }
+       curves.push(line);
+    }
+
+    return curves;
+  }, [dynamicMass, radius, dragDist]);
+
+  const groupRef = useRef<THREE.Group>(null);
+  
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = state.clock.elapsedTime * -0.02;
+    }
+  });
+
+  if (!isActive) return null;
+
+  return (
+    <group ref={groupRef}>
+      {points.map((curve, idx) => (
+        <Line 
+          key={idx} 
+          points={curve} 
+          color={color} 
+          lineWidth={1.5} 
+          transparent 
+          opacity={dragDist >= 0 ? 0.65 : 0.4} // Reduced opacity threshold (increased visual intensity)
+        />
+      ))}
+      
+      {/* Small orbiting particles trapped in geodesic well */}
+      {Array.from({ length: 8 }).map((_, i) => (
+        <GeodesicParticle key={i} radius={radius} mass={dynamicMass} color={color} index={i} onDragDist={setDragDist} />
+      ))}
+    </group>
+  );
+};
+
 // 1. Double-Accretion Star Glowing Shell (The Sun)
 const SpacetimeSun = () => {
   const { activeTimelineStep, activeDashboardId } = useDashboardStore();
@@ -395,6 +570,12 @@ const SpacetimeSun = () => {
     return createProceduralSunTexture(isSunActive ? activeTimelineStep : 3);
   }, [isSunActive, activeTimelineStep]);
 
+  const sunMat = useMemo(() => new StarShaderMaterial({
+    color1: new THREE.Color('#ffaa00'),
+    color2: new THREE.Color('#ff0033'),
+    color3: new THREE.Color('#ffee00'),
+  }), []);
+
   useFrame((state) => {
     const t = state.clock.getElapsedTime();
     if (innerRef.current) innerRef.current.rotation.y = t * 0.1;
@@ -402,6 +583,29 @@ const SpacetimeSun = () => {
       outerRef.current.rotation.z = -t * 0.15;
       outerRef.current.rotation.x = t * 0.05;
     }
+    
+    // Dynamic color shifting based on active state timeline
+    if (isSunActive) {
+      if (activeTimelineStep === 5) { // White Dwarf
+        sunMat.color1.set('#1e293b');
+        sunMat.color2.set('#06b6d4');
+        sunMat.color3.set('#e2f8ff');
+      } else if (activeTimelineStep === 4) { // Red Giant
+        sunMat.color1.set('#b91c1c');
+        sunMat.color2.set('#ea580c');
+        sunMat.color3.set('#ff0000');
+      } else {
+        sunMat.color1.set('#ffaa00');
+        sunMat.color2.set('#ff0033');
+        sunMat.color3.set('#ffee00');
+      }
+    } else {
+      sunMat.color1.set('#ffaa00');
+      sunMat.color2.set('#ff0033');
+      sunMat.color3.set('#ffee00');
+    }
+
+    sunMat.time = t;
   });
 
   const baseScale = isSunActive && activeTimelineStep === 5 ? 0.45 : isSunActive && activeTimelineStep === 4 ? 1.6 : 1.0;
@@ -411,28 +615,56 @@ const SpacetimeSun = () => {
   return (
     <DynamicPosition id="sun">
       <group scale={[baseScale, baseScale, baseScale]}>
-        {/* Prime Core */}
+        {/* Prime Core Shader */}
         <mesh ref={innerRef}>
           <sphereGeometry args={[109, 64, 64]} />
-          <meshStandardMaterial 
-            color={sunColor} 
-            map={texture}
-            roughness={0.1}
-            emissive={new THREE.Color(emissiveColor)}
-            emissiveIntensity={1.8}
+          <primitive object={sunMat} attach="material" />
+        </mesh>
+        
+        {/* Outer Plasma Corona glow */}
+        <mesh>
+          <sphereGeometry args={[112, 64, 64]} />
+          <primitive 
+            object={new AtmosphereShaderMaterial({ 
+              color: new THREE.Color(emissiveColor), 
+              coefficient: 0.8, 
+              power: 2.5 
+            })} 
+            attach="material" 
+            transparent 
+            blending={THREE.AdditiveBlending} 
+            depthWrite={false} 
+            side={THREE.BackSide} 
           />
         </mesh>
-        {/* Outer Corona Shield */}
+        <mesh scale={[1.05, 1.05, 1.05]}>
+          <sphereGeometry args={[109, 64, 64]} />
+          <primitive 
+            object={new AtmosphereShaderMaterial({ 
+              color: new THREE.Color(emissiveColor), 
+              coefficient: 0.6, 
+              power: 2.5 
+            })} 
+            attach="material" 
+            transparent 
+            blending={THREE.AdditiveBlending} 
+            depthWrite={false} 
+            side={THREE.FrontSide} 
+          />
+        </mesh>
+
+        {/* Outer Wireframe Shield (Optional aesthetic) */}
         <mesh ref={outerRef}>
-          <sphereGeometry args={[112, 32, 32]} />
+          <sphereGeometry args={[114, 32, 32]} />
           <meshBasicMaterial 
             color={emissiveColor} 
             wireframe 
             transparent 
-            opacity={activeTimelineStep === 1 ? 0.4 : 0.2} 
+            opacity={activeTimelineStep === 1 ? 0.2 : 0.05} 
             blending={THREE.AdditiveBlending} 
           />
         </mesh>
+        
         {/* Extreme Thermal Nova Ring */}
         {activeTimelineStep === 5 && (
           <mesh>
@@ -440,6 +672,27 @@ const SpacetimeSun = () => {
             <meshBasicMaterial color="#06b6d4" transparent opacity={0.25} wireframe />
           </mesh>
         )}
+
+        {isSunActive && (
+          <GravityField id="sun" mass={350} radius={450} color={emissiveColor} />
+        )}
+        
+        {isSunActive && (
+          <Html position={[0, -135, 0]} center>
+            <div 
+              className="px-3 py-1.5 rounded-lg border text-[11px] font-mono font-bold tracking-[0.2em] whitespace-nowrap backdrop-blur-md transition-all duration-1000"
+              style={{
+                 color: activeTimelineStep === 5 ? '#a5f3fc' : activeTimelineStep === 4 ? '#fca5a5' : '#fcd34d',
+                 borderColor: activeTimelineStep === 5 ? '#06b6d4' : activeTimelineStep === 4 ? '#ef4444' : '#f59e0b',
+                 backgroundColor: activeTimelineStep === 5 ? 'rgba(8, 145, 178, 0.15)' : activeTimelineStep === 4 ? 'rgba(220, 38, 38, 0.15)' : 'rgba(217, 119, 6, 0.15)',
+                 boxShadow: `0 0 20px ${activeTimelineStep === 5 ? 'rgba(6, 182, 212, 0.4)' : activeTimelineStep === 4 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(245, 158, 11, 0.4)'}`
+              }}
+            >
+              {activeTimelineStep === 5 ? 'WHITE DWARF' : activeTimelineStep === 4 ? 'RED GIANT' : activeTimelineStep === 1 ? 'PROTOSTAR' : 'MAIN SEQUENCE'}
+            </div>
+          </Html>
+        )}
+
         <StructuralAnnotations id="sun" />
       </group>
     </DynamicPosition>
@@ -524,41 +777,87 @@ const SpacetimeEarth = () => {
 
   return (
     <DynamicPosition id="earth">
-      {/* Planet Globe */}
+      {/* Planet Globe Engine */}
       <mesh ref={earthRef} castShadow receiveShadow>
-        <sphereGeometry args={[1.0, 32, 32]} />
+        <sphereGeometry args={[1.0, 64, 64]} />
         <meshStandardMaterial 
           color={earthColor}
           map={texture}
-          roughness={0.4}
-          metalness={0.15}
+          roughness={0.65}
+          metalness={0.1}
           emissive={new THREE.Color(isEarthActive && activeTimelineStep === 1 ? '#f97316' : '#000000')}
           emissiveIntensity={isEarthActive && activeTimelineStep === 1 ? 1.5 : 0}
         />
       </mesh>
+      
       {/* Cloud & Atmosphere Layer */}
       {(!isEarthActive || (activeTimelineStep !== 1 && activeTimelineStep !== 5)) && (
-        <mesh ref={cloudRef}>
-          <sphereGeometry args={[1.02, 32, 32]} />
-          <meshStandardMaterial 
-            color="#ffffff" 
+        <group>
+          <mesh ref={cloudRef}>
+            <sphereGeometry args={[1.012, 64, 64]} />
+            <meshStandardMaterial 
+              color="#ffffff" 
+              transparent 
+              opacity={0.3} 
+              roughness={0.9}
+            />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[1.06, 64, 64]} />
+            <primitive 
+              object={new AtmosphereShaderMaterial({ 
+                color: new THREE.Color('#38bdf8'), 
+                coefficient: 0.8, 
+                power: 3.5 
+              })} 
+              attach="material" 
+              transparent 
+              blending={THREE.AdditiveBlending} 
+              depthWrite={false} 
+              side={THREE.BackSide} 
+            />
+          </mesh>
+          <mesh scale={[1.06, 1.06, 1.06]}>
+            <sphereGeometry args={[1.0, 64, 64]} />
+            <primitive 
+              object={new AtmosphereShaderMaterial({ 
+                color: new THREE.Color('#38bdf8'), 
+                coefficient: 0.6, 
+                power: 3.0 
+              })} 
+              attach="material" 
+              transparent 
+              blending={THREE.AdditiveBlending} 
+              depthWrite={false} 
+              side={THREE.FrontSide} 
+            />
+          </mesh>
+        </group>
+      )}
+
+      {/* Early Earth / Lava World Glow */}
+      {(isEarthActive && activeTimelineStep === 1) && (
+        <mesh>
+          <sphereGeometry args={[1.08, 64, 64]} />
+          <primitive 
+            object={new AtmosphereShaderMaterial({ 
+              color: new THREE.Color('#f97316'), 
+              coefficient: 0.8, 
+              power: 2.5 
+            })} 
+            attach="material" 
             transparent 
-            opacity={0.25} 
-            roughness={0.9}
+            blending={THREE.AdditiveBlending} 
+            depthWrite={false} 
+            side={THREE.BackSide} 
           />
         </mesh>
       )}
-      {/* Blue Atmospheric Aura */}
-      <mesh>
-        <sphereGeometry args={[1.1, 32, 32]} />
-        <meshBasicMaterial 
-          color={isEarthActive && activeTimelineStep === 1 ? '#f97316' : '#38bdf8'} 
-          transparent 
-          opacity={0.1} 
-          blending={THREE.AdditiveBlending} 
-          side={THREE.BackSide}
-        />
-      </mesh>
+
+      {isEarthActive && (
+        <GravityField id="earth" mass={60} radius={120} color="#38bdf8" />
+      )}
+
       <StructuralAnnotations id="earth" />
     </DynamicPosition>
   );
