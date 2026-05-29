@@ -5,7 +5,7 @@ import rehypeRaw from 'rehype-raw';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import { Loader2, Send, RefreshCw, Clock, History, Info, FlaskConical, Atom, ChevronLeft, ChevronRight, ChevronDown, Compass, Leaf, Search, Sparkles } from 'lucide-react';
+import { Loader2, Send, RefreshCw, Clock, History, Info, FlaskConical, Atom, ChevronLeft, ChevronRight, ChevronDown, Compass, Leaf, Search, Sparkles, Dna } from 'lucide-react';
 import { SpacetimeCanvas } from './components/SpacetimeCanvas';
 import { ORGANISMS_DATA } from './data/organismsData';
 import { useModeStore } from './store/useModeStore';
@@ -18,6 +18,7 @@ import { ChemistryMatrix } from './components/ChemistryMatrix';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import { ReactionCatalog } from './components/ReactionCatalog';
 import { ReactionItem } from './data/reactionData';
+import { BiologicalHierarchy } from './components/BiologicalHierarchy';
 
 const TIME_MAPPING: Record<string, { start: number; label: string; unit: string }> = {
   sun: { start: 4.6, label: 'Billion Years Ago', unit: 'Ga' },
@@ -150,7 +151,7 @@ export default function App() {
     return false;
   });
   const [sliderPercent, setSliderPercent] = useState(100);
-  const [specsTab, setSpecsTab] = useState<'ledger' | 'biosphere' | 'reactions'>('ledger');
+  const [specsTab, setSpecsTab] = useState<'ledger' | 'biosphere' | 'reactions' | 'hierarchy'>('ledger');
   const [bioSearch, setBioSearch] = useState('');
   const [bioCategory, setBioCategory] = useState('All');
   const [expandedBioIds, setExpandedBioIds] = useState<Set<string>>(new Set());
@@ -184,6 +185,17 @@ export default function App() {
   const { setMode } = useModeStore();
   const { setSelectedElement } = useAtomicStore();
   const { activeDashboardId, activeTimelineStep, interactMode, setDashboardId, setTimelineStep, setInteractMode } = useDashboardStore();
+
+  const handleTriggerReaction = (rx: ReactionItem) => {
+    const elementsToDeposit = mapAtomsToDashboardIds(rx);
+    useDashboardStore.getState().setSimulationMode(true);
+    useDashboardStore.getState().setActiveReaction(rx);
+    useDashboardStore.setState({ simulationSelected: [] });
+    for (const el of elementsToDeposit) {
+      useDashboardStore.getState().toggleSimulationSelected(el);
+    }
+    useDashboardStore.getState().setSimulationActive(true);
+  };
 
   useEffect(() => {
     const handleReaction = (e: any) => {
@@ -847,7 +859,7 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
           <div className="flex border-b border-white/5 bg-[#07070a] shrink-0 font-mono text-[9px] font-bold select-none divide-x divide-white/5">
             <button
               onClick={() => setSpecsTab('ledger')}
-              className={`flex-1 py-3 text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-3 text-center transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 specsTab === 'ledger'
                   ? 'text-cyan-300 bg-cyan-950/10 shadow-[inset_0_-2px_0_#22d3ee]'
                   : 'text-white/40 hover:text-white/70 hover:bg-white/5'
@@ -858,7 +870,7 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
             </button>
             <button
               onClick={() => setSpecsTab('biosphere')}
-              className={`flex-1 py-3 text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-3 text-center transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 specsTab === 'biosphere'
                   ? 'text-emerald-300 bg-emerald-950/10 shadow-[inset_0_-2px_0_#10b981]'
                   : 'text-white/40 hover:text-emerald-400/60 hover:bg-emerald-950/5'
@@ -868,8 +880,19 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
               BIOSPHERE ({ORGANISMS_DATA.length})
             </button>
             <button
+              onClick={() => setSpecsTab('hierarchy')}
+              className={`flex-1 py-3 text-center transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                specsTab === 'hierarchy'
+                  ? 'text-cyan-300 bg-cyan-950/10 shadow-[inset_0_-2px_0_#22d3ee]'
+                  : 'text-white/40 hover:text-cyan-400/60 hover:bg-cyan-950/5'
+              }`}
+            >
+              <Dna className={`w-3 h-3 ${specsTab === 'hierarchy' ? 'text-cyan-400' : 'text-white/30'}`} />
+              BIOLOGY TREE
+            </button>
+            <button
               onClick={() => setSpecsTab('reactions')}
-              className={`flex-1 py-3 text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-3 text-center transition-all cursor-pointer flex items-center justify-center gap-1 ${
                 specsTab === 'reactions'
                   ? 'text-purple-300 bg-purple-950/10 shadow-[inset_0_-2px_0_#a855f7]'
                   : 'text-white/40 hover:text-purple-400/60 hover:bg-purple-950/5'
@@ -1132,6 +1155,17 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
             </div>
           )}
 
+          {specsTab === 'hierarchy' && (
+            <BiologicalHierarchy 
+              onAskAI={(question) => {
+                setTopic(question);
+                setSpecsTab('ledger');
+                handleSubmit(undefined, question);
+              }}
+              onTriggerReactionInChamber={handleTriggerReaction}
+            />
+          )}
+
           {specsTab === 'reactions' && (
             <ReactionCatalog 
               onAskAI={(question) => {
@@ -1139,21 +1173,7 @@ ${activeData.relationships.forces.map(f => `* **${f.name}**: ${f.desc}`).join('\
                 setSpecsTab('ledger');
                 handleSubmit(undefined, question);
               }}
-              onTriggerReactionInChamber={(rx) => {
-                const elementsToDeposit = mapAtomsToDashboardIds(rx);
-                // Turn on simulation mode
-                useDashboardStore.getState().setSimulationMode(true);
-                // Set the active reaction in store
-                useDashboardStore.getState().setActiveReaction(rx);
-                // Reset simulation selected
-                useDashboardStore.setState({ simulationSelected: [] });
-                // Deposit elements sequentially
-                for (const el of elementsToDeposit) {
-                  useDashboardStore.getState().toggleSimulationSelected(el);
-                }
-                // Automatically set simulation active/trigger collision!
-                useDashboardStore.getState().setSimulationActive(true);
-              }}
+              onTriggerReactionInChamber={handleTriggerReaction}
             />
           )}
         </div>
